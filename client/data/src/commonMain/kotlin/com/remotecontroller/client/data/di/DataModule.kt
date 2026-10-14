@@ -18,6 +18,6 @@ val dataModule = module {
     single { ConnectionPreferencesStore(get()) }
     single<ConnectionPreferencesRepository> { ConnectionPreferencesRepositoryImpl(get()) }
     single { AppScope() }
-    single<PcTransport> { PcSocketClient(get()) }
+    single<PcTransport> { PcSocketClient(get(), get()) }
     single<RemoteRepository> { RemoteRepositoryImpl(get(), get(), get()) }
 }

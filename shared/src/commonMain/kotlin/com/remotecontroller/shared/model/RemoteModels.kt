@@ -68,6 +68,10 @@ sealed interface RemoteCommand {
     @Serializable
     @SerialName("mouse_scroll")
     data class MouseScroll(val deltaY: Int) : RemoteCommand
+
+    @Serializable
+    @SerialName("hello")
+    data class Hello(val name: String) : RemoteCommand
 }
 
 fun RemoteCommand.describe(): String = when (this) {
@@ -80,6 +84,7 @@ fun RemoteCommand.describe(): String = when (this) {
     is RemoteCommand.MouseMove -> "Mouse move ($dx, $dy)"
     is RemoteCommand.MouseClick -> "Mouse ${button.lowercase()} click"
     is RemoteCommand.MouseScroll -> "Mouse scroll $deltaY"
+    is RemoteCommand.Hello -> "Client connected"
 }
 
 @Serializable

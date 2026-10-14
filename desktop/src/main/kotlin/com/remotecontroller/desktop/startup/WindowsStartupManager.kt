@@ -4,6 +4,9 @@ import com.sun.jna.platform.win32.Advapi32Util
 import com.sun.jna.platform.win32.WinReg
 
 class WindowsStartupManager : StartupManager {
+    override val title: String = "Start with Windows"
+    override val enabledDescription: String = "Launch the server automatically when you sign in"
+    override val unavailableDescription: String = "Available in the installed .exe app only"
 
     private val executablePath: String? = resolveExecutablePath()
 

@@ -17,6 +17,7 @@ data class ServerRuntimeStatus(
     val ktorState: KtorServerState = KtorServerState.Starting,
     val networkState: NetworkState = NetworkState.Unavailable,
     val connectedClients: Int = 0,
+    val clientNames: List<String> = emptyList(),
     val localAddresses: List<String> = emptyList(),
     val recommendedAddress: String? = null,
     val lastError: String? = null,
@@ -29,6 +30,7 @@ data class ServerRuntimeStatus(
             KtorServerState.Starting -> "Starting Ktor server…"
             KtorServerState.Running -> when {
                 networkState == NetworkState.Unavailable -> "Server running, no network adapter"
+                clientNames.isNotEmpty() -> "Running · ${clientNames.joinToString(", ")}"
                 connectedClients > 0 -> "Running · $connectedClients client(s) connected"
                 else -> "Running · waiting for device"
             }

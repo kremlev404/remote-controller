@@ -10,7 +10,7 @@ class CommandExecutor(
     private val mouseSimulator: MouseSimulator,
 ) {
 
-    fun execute(command: RemoteCommand): ServerStatus {
+    suspend fun execute(command: RemoteCommand): ServerStatus {
         when (command) {
             is RemoteCommand.SetVolume -> volumeController.setVolumeLevel(command.value)
             is RemoteCommand.VolumeUp -> volumeController.volumeUp(command.step)
@@ -21,16 +21,29 @@ class CommandExecutor(
             is RemoteCommand.MouseMove -> mouseSimulator.moveRelative(command.dx, command.dy)
             is RemoteCommand.MouseClick -> mouseSimulator.click(command.button)
             is RemoteCommand.MouseScroll -> mouseSimulator.scroll(command.deltaY)
+            is RemoteCommand.Hello -> Unit
         }
 
         return currentStatus(lastCommand = command.describe())
     }
 
-    fun currentStatus(lastCommand: String? = null): ServerStatus =
-        ServerStatus(
+    suspend fun currentStatus(lastCommand: String? = null): ServerStatus {
+        val volume = volumeController.readState()
+        return ServerStatus(
             connectedClients = 0,
-            volumeLevel = volumeController.getVolumeLevel(),
-            isMuted = volumeController.isMuted(),
+            volumeLevel = volume?.level ?: 0,
+            isMuted = volume?.muted ?: false,
             lastCommand = lastCommand,
         )
+    }
+
+    suspend fun currentStatusIfReadable(lastCommand: String? = null): ServerStatus? {
+        val volume = volumeController.readState() ?: return null
+        return ServerStatus(
+            connectedClients = 0,
+            volumeLevel = volume.level,
+            isMuted = volume.muted,
+            lastCommand = lastCommand,
+        )
+    }
 }

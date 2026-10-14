@@ -1,5 +1,6 @@
 package com.remotecontroller.desktop.server
 
+import com.remotecontroller.desktop.AppVersion
 import com.remotecontroller.desktop.executor.CommandExecutor
 import com.remotecontroller.shared.model.RemoteCommand
 import com.remotecontroller.shared.model.RemoteKeys
@@ -28,37 +29,46 @@ import io.ktor.websocket.readText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.net.BindException
 import java.net.Inet4Address
+import java.net.InetSocketAddress
 import java.net.NetworkInterface
-import java.net.URI
+import java.net.Socket
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class CommandServer(
     private val commandExecutor: CommandExecutor,
+    private val firewall: IncomingFirewall,
+    private val machineName: String,
     private val port: Int = RemoteKeys.DEFAULT_PORT,
 ) {
     private val lifecycle = Mutex()
     private var session = ServerSession()
 
     val status: StateFlow<ServerStatus>
-        field = MutableStateFlow(initialStatus())
+        field = MutableStateFlow(ServerStatus(connectedClients = 0, volumeLevel = 0, isMuted = false))
 
     val runtimeStatus: StateFlow<ServerRuntimeStatus>
         field = MutableStateFlow(ServerRuntimeStatus(port = port))
 
-    private val probeClient: java.net.http.HttpClient = java.net.http.HttpClient.newBuilder()
-        .connectTimeout(java.time.Duration.ofMillis(PROBE_TIMEOUT_MS))
-        .build()
+    private val clients = mutableListOf<ClientSlot>()
+    private var nextClientId = 1L
+
+    @Volatile
+    private var volumeSnapshot = VolumeSnapshot(level = -1, muted = false)
 
     val localAddresses: List<String>
         get() = readCandidates().map { it.address }
@@ -85,57 +95,13 @@ class CommandServer(
     }
 
     suspend fun ensureRunning() {
-        if (lifecycle.withLock { session.shutdown }) return
-
-        val needsStart = lifecycle.withLock {
-            session.engine == null || session.phase != KtorServerState.Running
+        val down = lifecycle.withLock {
+            if (session.shutdown) return
+            session.engine == null ||
+                session.phase == KtorServerState.Stopped ||
+                session.phase == KtorServerState.Error
         }
-        if (needsStart) {
-            bringUp("ensure running")
-            return
-        }
-
-        val healthy = probeLocalHealth()
-        val restart = lifecycle.withLock {
-            if (session.shutdown || session.engine == null || session.phase != KtorServerState.Running) {
-                return@withLock false
-            }
-            if (healthy || runtimeStatus.value.connectedClients > 0) {
-                if (session.probeFailures != 0 || session.lastError != null) {
-                    session = session.copy(probeFailures = 0, lastError = null)
-                    publishRuntimeLocked()
-                }
-                false
-            } else {
-                val failures = session.probeFailures + 1
-                session = session.copy(probeFailures = failures)
-                log("local health probe failed ($failures/$FAILURES_BEFORE_RESTART)")
-                if (failures < FAILURES_BEFORE_RESTART) {
-                    session = session.copy(
-                        lastError = "Local health check failed ($failures of $FAILURES_BEFORE_RESTART)",
-                    )
-                    publishRuntimeLocked()
-                    false
-                } else {
-                    true
-                }
-            }
-        }
-        if (!restart) return
-
-        lifecycle.withLock {
-            if (session.shutdown || session.engine == null) return
-            log("restarting server after $FAILURES_BEFORE_RESTART failed health checks")
-            session = session.copy(
-                phase = KtorServerState.Recovering,
-                lastError = "Restarting server after failed health checks",
-                probeFailures = 0,
-                restarts = session.restarts + 1,
-            )
-            publishRuntimeLocked()
-            stopEngineLocked()
-        }
-        bringUp("health recovery")
+        if (down) bringUp("ensure running")
     }
 
     suspend fun refreshStatus() {
@@ -171,7 +137,6 @@ class CommandServer(
         }
         if (!bound) return
 
-        val healthy = awaitHealthy()
         val listening = lifecycle.withLock {
             if (session.shutdown || session.engine == null) {
                 stopEngineLocked()
@@ -179,13 +144,6 @@ class CommandServer(
                     session = session.copy(phase = KtorServerState.Error)
                     publishRuntimeLocked()
                 }
-                false
-            } else if (!healthy) {
-                val message = "Server started but is not accepting connections on 127.0.0.1:$port"
-                session = session.copy(lastError = message, phase = KtorServerState.Error)
-                log(message)
-                stopEngineLocked()
-                publishRuntimeLocked()
                 false
             } else {
                 session = session.copy(
@@ -198,74 +156,23 @@ class CommandServer(
                 true
             }
         }
-        if (listening) ensureFirewallRule()
+        if (!listening) return
+        ensureFirewallRule()
+
+        if (!awaitHealthy()) {
+            log("local health probe did not succeed yet; server stays up and will be rechecked")
+        }
     }
 
     private suspend fun bindServer() {
         var lastFailure: Throwable? = null
         repeat(BIND_ATTEMPTS) { attempt ->
             try {
-                withContext(Dispatchers.IO) {
-                    embeddedServer(Netty, host = "0.0.0.0", port = port) {
-                        install(ContentNegotiation) {
-                            json(RemoteJson.json)
-                        }
-                        install(WebSockets) {
-                            pingPeriod = 20.seconds
-                            timeout = 120.seconds
-                        }
-
-                        routing {
-                            get(RemoteProtocol.INFO_PATH) {
-                                call.respond(
-                                    ServerInfo(
-                                        name = System.getenv("COMPUTERNAME") ?: "Windows PC",
-                                        port = port,
-                                    ),
-                                )
-                            }
-
-                            webSocket(RemoteProtocol.WS_PATH) {
-                                val clients = noteClientChange(1)
-                                log("client connected ($clients)")
-                                publishVolumeStatus(clients)
-
-                                try {
-                                    sendServerStatus(currentStatus(clients))
-
-                                    for (frame in incoming) {
-                                        if (frame is Frame.Text) {
-                                            runCatching {
-                                                handleCommand(frame.readText())
-                                            }.onFailure { error ->
-                                                log("command failed: ${error.message}", error)
-                                                runCatching {
-                                                    send(
-                                                        Frame.Text(
-                                                            RemoteJson.encodeMessage(
-                                                                ServerMessage.Error(error.message ?: "Command failed"),
-                                                            ),
-                                                        ),
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                } catch (error: CancellationException) {
-                                    throw error
-                                } catch (error: Exception) {
-                                    log("client socket closed: ${error.message}")
-                                } finally {
-                                    val remaining = noteClientChange(-1)
-                                    log("client disconnected ($remaining)")
-                                    publishVolumeStatus(remaining)
-                                }
-                            }
-                        }
-                    }.start(wait = false).also { started ->
-                        session = session.copy(engine = started)
-                    }
-                }
+                // createEngine() is a plain function so Ktor does not parent the server
+                // on this coroutine. startSuspend uses a blocking dispatcher; start() from
+                // Dispatchers.IO never returns because the server job outlives the caller.
+                val started = createEngine().startSuspend(wait = false)
+                session = session.copy(engine = started)
                 return
             } catch (error: CancellationException) {
                 throw error
@@ -279,6 +186,62 @@ class CommandServer(
         throw lastFailure ?: IllegalStateException("Failed to bind port $port")
     }
 
+    private fun createEngine(): EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration> =
+        embeddedServer(Netty, host = "0.0.0.0", port = port) {
+            install(ContentNegotiation) {
+                json(RemoteJson.json)
+            }
+            install(WebSockets) {
+                pingPeriod = 20.seconds
+                timeout = 120.seconds
+            }
+
+            routing {
+                get(RemoteProtocol.INFO_PATH) {
+                    call.respond(
+                        ServerInfo(
+                            name = machineName,
+                            port = port,
+                            version = AppVersion.VERSION,
+                        ),
+                    )
+                }
+
+                webSocket(RemoteProtocol.WS_PATH) {
+                    val slot = registerClient(this)
+                    log("client connected (${slot.name})")
+                    publishVolumeStatus()
+
+                    try {
+                        slot.sendMessage(ServerMessage.Status(currentStatus()))
+
+                        for (frame in incoming) {
+                            if (frame is Frame.Text) {
+                                runCatching {
+                                    handleCommand(slot, frame.readText())
+                                }.onFailure { error ->
+                                    log("command failed: ${error.message}", error)
+                                    runCatching {
+                                        slot.sendMessage(
+                                            ServerMessage.Error(error.message ?: "Command failed"),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        log("client socket closed: ${error.message}")
+                    } finally {
+                        unregisterClient(slot)
+                        log("client disconnected (${slot.name})")
+                        publishVolumeStatus()
+                    }
+                }
+            }
+        }
+
     private suspend fun awaitHealthy(): Boolean {
         repeat(HEALTHY_POLLS) { attempt ->
             if (probeLocalHealth()) return true
@@ -289,25 +252,20 @@ class CommandServer(
 
     private suspend fun probeLocalHealth(): Boolean = withContext(Dispatchers.IO) {
         runCatching {
-            val request = java.net.http.HttpRequest.newBuilder()
-                .uri(URI.create("http://127.0.0.1:$port${RemoteProtocol.INFO_PATH}"))
-                .timeout(java.time.Duration.ofMillis(PROBE_TIMEOUT_MS))
-                .GET()
-                .build()
-            val response = probeClient.send(request, java.net.http.HttpResponse.BodyHandlers.discarding())
-            response.statusCode() in 200..299
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress("127.0.0.1", port), PROBE_TIMEOUT_MS.toInt())
+            }
+            true
         }.getOrDefault(false)
     }
 
     private suspend fun stopEngineLocked() {
         val current = session.engine ?: return
         session = session.copy(engine = null)
-        withContext(Dispatchers.IO) {
-            runCatching {
-                current.stop(gracePeriodMillis = 200, timeoutMillis = 1_000)
-            }.onFailure { error ->
-                log("stop failed: ${error.message}", error)
-            }
+        runCatching {
+            current.stopSuspend(gracePeriodMillis = 200, timeoutMillis = 1_000)
+        }.onFailure { error ->
+            log("stop failed: ${error.message}", error)
         }
     }
 
@@ -320,7 +278,7 @@ class CommandServer(
         if (alreadyChecked) return
 
         val firewallWarning = withContext(Dispatchers.IO) {
-            WindowsFirewall.allowIncomingTcp(port)
+            firewall.allowIncomingTcp(port)
         } ?: return
 
         lifecycle.withLock {
@@ -330,35 +288,117 @@ class CommandServer(
         log(firewallWarning)
     }
 
-    private suspend fun DefaultWebSocketServerSession.handleCommand(text: String) {
+    fun observeSystemVolume(): Flow<ServerStatus> = flow {
+        while (currentCoroutineContext().isActive) {
+            delay(VOLUME_POLL_INTERVAL_MS.milliseconds)
+            val changed = try {
+                readSystemVolumeChange()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                log("volume sync failed: ${error.message}")
+                null
+            } ?: continue
+            emit(changed)
+        }
+    }
+
+    suspend fun shareStatus(serverStatus: ServerStatus) {
+        broadcast(ServerMessage.Status(serverStatus))
+    }
+
+    private suspend fun readSystemVolumeChange(): ServerStatus? {
+        if (lifecycle.withLock { session.shutdown || session.phase != KtorServerState.Running }) return null
+
+        val before = volumeSnapshot
+        val latest = commandExecutor.currentStatusIfReadable() ?: return null
+        if (latest.volumeLevel == before.level && latest.isMuted == before.muted) return null
+
+        val published = status.updateAndGet { current ->
+            if (current.volumeLevel != before.level || current.isMuted != before.muted) {
+                current
+            } else {
+                latest.copy(
+                    connectedClients = clientCount(),
+                    lastCommand = current.lastCommand,
+                )
+            }
+        }
+        if (published.volumeLevel == before.level && published.isMuted == before.muted) return null
+        volumeSnapshot = VolumeSnapshot(published.volumeLevel, published.isMuted)
+        return published
+    }
+
+    private suspend fun handleCommand(slot: ClientSlot, text: String) {
         val command = RemoteJson.decode<RemoteCommand>(text)
-        val clients = runtimeStatus.value.connectedClients
-        val newStatus = commandExecutor.execute(command).copy(connectedClients = clients)
+        if (command is RemoteCommand.Hello) {
+            val name = sanitizeClientName(command.name)
+            synchronized(clients) { slot.name = name }
+            publishClients()
+            log("client ${slot.id} is $name")
+            return
+        }
+
+        val newStatus = commandExecutor.execute(command).copy(connectedClients = clientCount())
+        volumeSnapshot = VolumeSnapshot(newStatus.volumeLevel, newStatus.isMuted)
         status.value = newStatus
-        send(Frame.Text(RemoteJson.encodeMessage(ServerMessage.Ack(command, success = true))))
-        send(Frame.Text(RemoteJson.encodeMessage(ServerMessage.Status(newStatus))))
+        slot.sendMessage(ServerMessage.Ack(command, success = true))
+        broadcast(ServerMessage.Status(newStatus))
     }
 
-    private suspend fun DefaultWebSocketServerSession.sendServerStatus(serverStatus: ServerStatus) {
-        send(Frame.Text(RemoteJson.encodeMessage(ServerMessage.Status(serverStatus))))
+    private fun registerClient(session: DefaultWebSocketServerSession): ClientSlot {
+        val remote = session.call.request.local.remoteHost.ifBlank { "Client" }
+        val slot = synchronized(clients) {
+            ClientSlot(
+                id = nextClientId++,
+                session = session,
+                name = remote,
+            ).also(clients::add)
+        }
+        publishClients()
+        return slot
     }
 
-    private fun noteClientChange(delta: Int): Int =
-        runtimeStatus.updateAndGet { current ->
-            current.copy(connectedClients = (current.connectedClients + delta).coerceAtLeast(0))
-        }.connectedClients
+    private fun unregisterClient(slot: ClientSlot) {
+        synchronized(clients) { clients.remove(slot) }
+        publishClients()
+    }
 
-    private fun publishVolumeStatus(clients: Int) {
+    private suspend fun broadcast(message: ServerMessage) {
+        val slots = synchronized(clients) { clients.toList() }
+        for (slot in slots) {
+            runCatching { slot.sendMessage(message) }
+        }
+    }
+
+    private suspend fun publishVolumeStatus() {
+        val latest = commandExecutor.currentStatus()
+        volumeSnapshot = VolumeSnapshot(latest.volumeLevel, latest.isMuted)
         status.update { current ->
-            commandExecutor.currentStatus().copy(
-                connectedClients = clients,
+            latest.copy(
+                connectedClients = clientCount(),
                 lastCommand = current.lastCommand,
             )
         }
     }
 
-    private fun currentStatus(clients: Int): ServerStatus =
-        commandExecutor.currentStatus().copy(connectedClients = clients)
+    private suspend fun currentStatus(): ServerStatus =
+        commandExecutor.currentStatus().copy(connectedClients = clientCount())
+
+    private fun clientCount(): Int = synchronized(clients) { clients.size }
+
+    private fun clientNames(): List<String> = synchronized(clients) { clients.map { it.name } }
+
+    private fun publishClients() {
+        val names = clientNames()
+        runtimeStatus.update { current ->
+            current.copy(connectedClients = names.size, clientNames = names)
+        }
+        status.update { current -> current.copy(connectedClients = names.size) }
+    }
+
+    private fun sanitizeClientName(name: String): String =
+        name.replace(Regex("\\s+"), " ").trim().take(CLIENT_NAME_MAX).ifBlank { "Client" }
 
     private fun publishRuntimeLocked() {
         val snapshot = session
@@ -368,7 +408,8 @@ class CommandServer(
             ServerRuntimeStatus(
                 ktorState = snapshot.phase,
                 networkState = if (reachable.isEmpty()) NetworkState.Unavailable else NetworkState.Available,
-                connectedClients = current.connectedClients,
+                connectedClients = clientCount(),
+                clientNames = clientNames(),
                 localAddresses = addresses.map { it.address },
                 recommendedAddress = reachable.maxByOrNull { it.score }?.address,
                 lastError = snapshot.lastError,
@@ -378,9 +419,6 @@ class CommandServer(
             )
         }
     }
-
-    private fun initialStatus(): ServerStatus =
-        commandExecutor.currentStatus().copy(connectedClients = 0)
 
     private fun readCandidates(): List<LocalAddress> {
         val interfaces = runCatching { NetworkInterface.getNetworkInterfaces()?.toList().orEmpty() }
@@ -450,6 +488,25 @@ class CommandServer(
         val firewallChecked: Boolean = false,
     )
 
+    private class ClientSlot(
+        val id: Long,
+        val session: DefaultWebSocketServerSession,
+        var name: String,
+    ) {
+        private val sendLock = Mutex()
+
+        suspend fun sendMessage(message: ServerMessage) {
+            sendLock.withLock {
+                session.send(Frame.Text(RemoteJson.encodeMessage(message)))
+            }
+        }
+    }
+
+    private data class VolumeSnapshot(
+        val level: Int,
+        val muted: Boolean,
+    )
+
     private data class LocalAddress(
         val address: String,
         val score: Int,
@@ -461,7 +518,8 @@ class CommandServer(
         const val HEALTHY_POLLS = 8
         const val HEALTHY_POLL_DELAY_MS = 200L
         const val PROBE_TIMEOUT_MS = 700L
-        const val FAILURES_BEFORE_RESTART = 3
+        const val CLIENT_NAME_MAX = 48
+        const val VOLUME_POLL_INTERVAL_MS = 400L
 
         val VIRTUAL_MARKERS = listOf(
             "virtual",

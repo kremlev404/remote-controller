@@ -1,10 +1,14 @@
 package com.remotecontroller.desktop.executor
 
+data class VolumeState(
+    val level: Int,
+    val muted: Boolean,
+)
+
 interface VolumeController {
-    fun getVolumeLevel(): Int
-    fun isMuted(): Boolean
-    fun setVolumeLevel(level: Int)
-    fun volumeUp(step: Int = 5)
-    fun volumeDown(step: Int = 5)
-    fun toggleMute()
+    suspend fun readState(): VolumeState?
+    suspend fun setVolumeLevel(level: Int)
+    suspend fun volumeUp(step: Int = 5)
+    suspend fun volumeDown(step: Int = 5)
+    suspend fun toggleMute()
 }

@@ -21,6 +21,9 @@ data class DesktopUiState(
     val recommendedAddress: String? = null,
     val launchAtStartup: Boolean = false,
     val startupAvailable: Boolean = false,
+    val startupTitle: String = "",
+    val startupEnabledHint: String = "",
+    val startupUnavailableHint: String = "",
     val startupError: String? = null,
 ) {
     val isRunning: Boolean
@@ -45,6 +48,9 @@ class DesktopViewModel(
             recommendedAddress = commandServer.recommendedAddress,
             launchAtStartup = startupManager.isEnabled(),
             startupAvailable = startupManager.canConfigure(),
+            startupTitle = startupManager.title,
+            startupEnabledHint = startupManager.enabledDescription,
+            startupUnavailableHint = startupManager.unavailableDescription,
         )
 
         viewModelScope.launch {

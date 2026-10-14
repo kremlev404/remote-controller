@@ -14,6 +14,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 class ServerLifecycle(
     private val commandServer: CommandServer,
+    private val keepAlive: ServerKeepAlive,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var started = false
@@ -21,6 +22,7 @@ class ServerLifecycle(
     fun start() {
         if (started) return
         started = true
+        keepAlive.start()
 
         scope.launch {
             commandServer.start()
@@ -48,6 +50,10 @@ class ServerLifecycle(
                 }
             }
         }
+
+        scope.launch {
+            commandServer.observeSystemVolume().collect(commandServer::shareStatus)
+        }
     }
 
     fun shutdown() {
@@ -55,6 +61,7 @@ class ServerLifecycle(
         started = false
         runBlocking(Dispatchers.IO) {
             commandServer.stop()
+            keepAlive.stop()
             scope.coroutineContext[Job]?.cancelAndJoin()
         }
     }
