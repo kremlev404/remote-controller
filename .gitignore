@@ -1,12 +1,14 @@
 # Gradle files
 .gradle/
 build/
+artifacts/
 
 # Local configuration file (sdk path, etc)
 local.properties
 
 # Log/OS Files
 *.log
+.kotlin
 
 # Android Studio generated files and folders
 captures/
@@ -32,3 +34,8 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+iosApp/build/

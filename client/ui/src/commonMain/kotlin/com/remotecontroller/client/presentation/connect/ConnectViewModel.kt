@@ -1,0 +1,198 @@
+package com.remotecontroller.client.presentation.connect
+
+import androidx.compose.runtime.Immutable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.remotecontroller.client.domain.model.ConnectionState
+import com.remotecontroller.client.domain.model.LocalNetworkAccess
+import com.remotecontroller.client.domain.model.SavedConnection
+import com.remotecontroller.client.domain.usecase.ConnectToPcUseCase
+import com.remotecontroller.client.domain.usecase.DisconnectFromPcUseCase
+import com.remotecontroller.client.domain.usecase.ObserveConnectionStateUseCase
+import com.remotecontroller.client.domain.usecase.ObserveSavedConnectionUseCase
+import com.remotecontroller.client.domain.usecase.ObserveSavedServersUseCase
+import com.remotecontroller.client.domain.usecase.SaveConnectionUseCase
+import com.remotecontroller.client.presentation.AppSession
+import com.remotecontroller.client.presentation.describeForUi
+import kotlinx.coroutines.CancellationException
+import com.remotecontroller.shared.model.ServerPort
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
+@Immutable
+data class ConnectUiState(
+    val host: String = "",
+    val port: String = ServerPort.DEFAULT.value.toString(),
+    val savedServers: List<SavedConnection> = emptyList(),
+    val connectionState: ConnectionState = ConnectionState.Disconnected,
+    val isLoading: Boolean = false,
+    val pendingStartupNavigation: Boolean = false,
+    val errorMessage: String? = null,
+    val needsLocalNetworkPermission: Boolean = false,
+) {
+    val isConnected: Boolean get() = connectionState == ConnectionState.Connected
+}
+
+private data class ConnectFormState(
+    val host: String = "",
+    val port: String = ServerPort.DEFAULT.value.toString(),
+    val isLoading: Boolean = false,
+    val pendingStartupNavigation: Boolean = false,
+    val errorMessage: String? = null,
+    val needsLocalNetworkPermission: Boolean = false,
+    val savedDefaultsApplied: Boolean = false,
+)
+
+class ConnectViewModel(
+    private val connectToPcUseCase: ConnectToPcUseCase,
+    private val disconnectFromPcUseCase: DisconnectFromPcUseCase,
+    private val saveConnectionUseCase: SaveConnectionUseCase,
+    observeConnectionStateUseCase: ObserveConnectionStateUseCase,
+    private val observeSavedConnectionUseCase: ObserveSavedConnectionUseCase,
+    observeSavedServersUseCase: ObserveSavedServersUseCase,
+    private val localNetwork: LocalNetworkAccess,
+) : ViewModel() {
+
+    val localNetworkPermission: String = localNetwork.permission
+
+    private val formState = MutableStateFlow(ConnectFormState())
+    private val localNetworkAllowed = MutableStateFlow(localNetwork.isGranted())
+    private val startup = Mutex()
+    private var startupStarted = false
+
+    val uiState: StateFlow<ConnectUiState> = combine(
+        formState,
+        observeConnectionStateUseCase(),
+        observeSavedServersUseCase(),
+    ) { form, connection, savedServers ->
+        ConnectUiState(
+            host = form.host,
+            port = form.port,
+            savedServers = savedServers,
+            connectionState = connection,
+            isLoading = form.isLoading,
+            pendingStartupNavigation = form.pendingStartupNavigation,
+            errorMessage = form.errorMessage,
+            needsLocalNetworkPermission = form.needsLocalNetworkPermission,
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = ConnectUiState(),
+    )
+
+    init {
+        viewModelScope.launch {
+            val saved = observeSavedConnectionUseCase().first() ?: return@launch
+            formState.update {
+                it.copy(
+                    host = saved.host,
+                    port = saved.portText,
+                    savedDefaultsApplied = true,
+                )
+            }
+        }
+        if (localNetworkAllowed.value) launchStartupConnect()
+    }
+
+    fun onLocalNetworkAccess(granted: Boolean) {
+        localNetworkAllowed.value = granted
+        formState.update { current ->
+            current.copy(
+                needsLocalNetworkPermission = !granted,
+                errorMessage = if (granted && current.needsLocalNetworkPermission) null else current.errorMessage,
+            )
+        }
+        if (granted) launchStartupConnect()
+    }
+
+    fun onHostChange(host: String) {
+        formState.update { it.copy(host = host, errorMessage = null, savedDefaultsApplied = true) }
+    }
+
+    fun onPortChange(port: String) {
+        formState.update {
+            it.copy(
+                port = port.filter(Char::isDigit),
+                errorMessage = null,
+                savedDefaultsApplied = true,
+            )
+        }
+    }
+
+    fun selectSavedServer(server: SavedConnection) {
+        formState.update {
+            it.copy(
+                host = server.host,
+                port = server.portText,
+                errorMessage = null,
+                savedDefaultsApplied = true,
+            )
+        }
+    }
+
+    fun isLocalNetworkGranted(): Boolean = localNetwork.isGranted()
+
+    fun connect() {
+        if (!localNetwork.isGranted()) {
+            localNetworkAllowed.value = false
+            formState.update { it.copy(needsLocalNetworkPermission = true) }
+            return
+        }
+        localNetworkAllowed.value = true
+        val form = formState.value
+        val port = form.port.toIntOrNull() ?: ServerPort.DEFAULT.value
+        formState.update { it.copy(pendingStartupNavigation = false) }
+        viewModelScope.launch { performConnect(form.host, port) }
+    }
+
+    private fun launchStartupConnect() {
+        viewModelScope.launch {
+            val saved = startup.withLock {
+                if (startupStarted || AppSession.startupAutoConnectDone || !localNetworkAllowed.value) {
+                    null
+                } else {
+                    startupStarted = true
+                    observeSavedConnectionUseCase().first()
+                }
+            } ?: return@launch
+            if (saved.host.isBlank()) return@launch
+            AppSession.startupAutoConnectDone = true
+            formState.update {
+                it.copy(
+                    host = saved.host,
+                    port = saved.portText,
+                    pendingStartupNavigation = true,
+                    savedDefaultsApplied = true,
+                )
+            }
+            performConnect(saved.host, saved.port)
+        }
+    }
+
+    private suspend fun performConnect(host: String, port: Int) {
+        formState.update { it.copy(isLoading = true, errorMessage = null) }
+        try {
+            connectToPcUseCase(host, port)
+                .onSuccess { saveConnectionUseCase(host, port) }
+                .onFailure { error ->
+                    if (error is CancellationException) return@onFailure
+                    formState.update { it.copy(errorMessage = error.describeForUi()) }
+                }
+        } finally {
+            formState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    fun disconnect() {
+        viewModelScope.launch { disconnectFromPcUseCase() }
+    }
+}
