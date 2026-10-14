@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.remotecontroller.desktop.AppVersion
 import com.remotecontroller.desktop.server.KtorServerState
 import com.remotecontroller.desktop.server.NetworkState
 import com.remotecontroller.desktop.server.ServerRuntimeStatus
@@ -77,6 +78,9 @@ fun DesktopApp(viewModel: DesktopViewModel = koinViewModel()) {
                 LastCommandCard(uiState.lastCommand)
 
                 StartupCard(
+                    title = uiState.startupTitle,
+                    enabledHint = uiState.startupEnabledHint,
+                    unavailableHint = uiState.startupUnavailableHint,
                     enabled = uiState.launchAtStartup,
                     available = uiState.startupAvailable,
                     errorMessage = uiState.startupError,
@@ -101,7 +105,7 @@ private fun HeaderSection(runtime: ServerRuntimeStatus?) {
         )
         Column {
             Text(
-                text = "Remote Controller Server",
+                text = "${AppVersion.NAME} ${AppVersion.VERSION}",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
             )
@@ -140,17 +144,14 @@ private fun ServerStatusCard(runtime: ServerRuntimeStatus?) {
             )
             StatusRow(
                 label = "Clients",
-                value = when (runtime?.connectedClients ?: 0) {
-                    0 -> "Disconnected"
-                    1 -> "1 connected"
-                    else -> "${runtime?.connectedClients} connected"
-                },
-                color = if ((runtime?.connectedClients ?: 0) > 0) {
+                value = runtime?.clientNames?.takeIf { it.isNotEmpty() }?.joinToString(", ")
+                    ?: "Disconnected",
+                color = if (runtime?.clientNames?.isNotEmpty() == true) {
                     Color(0xFF2E7D32)
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
-                icon = if ((runtime?.connectedClients ?: 0) > 0) Icons.Default.Link else Icons.Default.LinkOff,
+                icon = if (runtime?.clientNames?.isNotEmpty() == true) Icons.Default.Link else Icons.Default.LinkOff,
             )
 
             runtime?.lastError?.let { error ->
@@ -213,6 +214,7 @@ private fun StatusRow(
         }
         Text(
             text = value,
+            modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodyMedium,
             color = color,
         )
@@ -365,6 +367,9 @@ private fun ConnectionCard(
 
 @Composable
 private fun StartupCard(
+    title: String,
+    enabledHint: String,
+    unavailableHint: String,
     enabled: Boolean,
     available: Boolean,
     errorMessage: String?,
@@ -397,16 +402,12 @@ private fun StartupCard(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Start with Windows",
+                        text = title,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
                     )
                     Text(
-                        text = if (available) {
-                            "Launch the server automatically when you sign in"
-                        } else {
-                            "Available in the installed .exe app only"
-                        },
+                        text = if (available) enabledHint else unavailableHint,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

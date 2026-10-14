@@ -15,6 +15,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.remotecontroller.desktop.di.desktopAppModule
+import com.remotecontroller.desktop.AppVersion
 import com.remotecontroller.desktop.server.ServerLifecycle
 import com.remotecontroller.desktop.ui.DesktopApp
 import org.koin.compose.KoinContext
@@ -22,26 +23,31 @@ import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 
-fun main() = application {
+fun main() {
     startKoin {
         modules(desktopAppModule)
     }
 
     val serverLifecycle = GlobalContext.get().get<ServerLifecycle>()
     serverLifecycle.start()
+    Runtime.getRuntime().addShutdownHook(Thread {
+        serverLifecycle.shutdown()
+    })
 
-    var windowVisible by remember { mutableStateOf(true) }
+    application {
+        var windowVisible by remember { mutableStateOf(true) }
 
-    ApplicationContent(
-        windowVisible = windowVisible,
-        onHideWindow = { windowVisible = false },
-        onExitApplication = {
-            serverLifecycle.shutdown()
-            stopKoin()
-            exitApplication()
-        },
-        onShowWindow = { windowVisible = true },
-    )
+        ApplicationContent(
+            windowVisible = windowVisible,
+            onHideWindow = { windowVisible = false },
+            onExitApplication = {
+                serverLifecycle.shutdown()
+                stopKoin()
+                exitApplication()
+            },
+            onShowWindow = { windowVisible = true },
+        )
+    }
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -58,7 +64,7 @@ private fun ApplicationScope.ApplicationContent(
         if (windowVisible) {
             Window(
                 onCloseRequest = onHideWindow,
-                title = "Remote Controller Server",
+                title = "${AppVersion.NAME} ${AppVersion.VERSION}",
                 icon = appIcon,
                 state = rememberWindowState(width = 480.dp, height = 916.dp),
             ) {
@@ -68,7 +74,7 @@ private fun ApplicationScope.ApplicationContent(
 
         Tray(
             icon = appIcon,
-            tooltip = "Remote Controller Server",
+            tooltip = "Remote Controller Server is running",
             onAction = onShowWindow,
             menu = {
                 Item("Show", onClick = onShowWindow)

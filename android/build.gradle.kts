@@ -11,8 +11,8 @@ android {
         applicationId = "com.remotecontroller.android"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = rootProject.extra["productVersionCode"] as Int
+        versionName = rootProject.extra["productVersion"] as String
     }
 
     buildTypes {

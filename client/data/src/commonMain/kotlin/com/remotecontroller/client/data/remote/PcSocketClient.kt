@@ -4,6 +4,7 @@ import com.remotecontroller.client.data.log.logInfo
 import com.remotecontroller.client.data.log.logWarn
 import com.remotecontroller.shared.model.PcHost
 import com.remotecontroller.shared.model.RemoteCommand
+import com.remotecontroller.shared.model.RemoteCommand.Hello
 import com.remotecontroller.shared.model.ServerInfo
 import com.remotecontroller.shared.model.ServerMessage
 import com.remotecontroller.shared.model.ServerPort
@@ -38,6 +39,7 @@ interface PcLink {
 
 class PcSocketClient(
     private val http: HttpClient,
+    private val deviceIdentity: DeviceIdentity,
 ) : PcTransport {
 
     override suspend fun open(host: PcHost, port: ServerPort): PcLink {
@@ -66,8 +68,22 @@ class PcSocketClient(
             http.webSocketSession("ws://$endpoint${RemoteProtocol.WS_PATH}")
         }
         logInfo(TAG, "websocket open $endpoint")
-        return KtorLink(socket)
+        val link = KtorLink(socket)
+        try {
+            link.send(Hello(deviceName()))
+        } catch (error: Throwable) {
+            link.close()
+            throw error
+        }
+        return link
     }
+
+    private fun deviceName(): String =
+        deviceIdentity.deviceName()
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .take(NAME_MAX)
+            .ifBlank { "Client" }
 
     private suspend fun <T> within(timeout: Duration, block: suspend () -> T): T {
         return withTimeoutOrNull(timeout) { block() }
@@ -109,6 +125,7 @@ class PcSocketClient(
 
     private companion object {
         const val TAG = "RemoteConnection"
+        const val NAME_MAX = 48
         const val HANDSHAKE_ATTEMPTS = 2
         val HANDSHAKE_RETRY_DELAY = 400.milliseconds
         val INFO_TIMEOUT = 8.seconds

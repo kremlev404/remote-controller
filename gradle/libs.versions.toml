@@ -15,6 +15,7 @@ navigation-kmp = "2.10.0-beta01"
 datastore = "1.2.1"
 core-ktx = "1.17.0"
 jna = "5.19.1"
+slf4j = "2.0.17"
 
 [libraries]
 androidx-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
@@ -60,6 +61,7 @@ androidx-datastore-preferences-core = { module = "androidx.datastore:datastore-p
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
+slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

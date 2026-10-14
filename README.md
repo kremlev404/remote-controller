@@ -70,14 +70,35 @@ On a Mac, open `iosApp/iosApp.xcodeproj`, set your team in `iosApp/Configuration
 
 iOS platform code is still `TODO()`: network monitor, Ktor Darwin client, DataStore path, local-network permission, and logging. The screen is shared; those actuals are the next implementation step.
 
-## Build
+## Version
+
+`version.properties` at the repository root is the product name and version:
+
+```
+name=Remote Controller Server
+version=1.0.0
+versionCode=1
+```
+
+Gradle reads that file for the desktop package name, package version, artifact file names, the version reported by the running server, and the Android `versionName` / `versionCode`. `version` must be numeric (`1.2.0`) because the desktop installer is built with jpackage.
+
+## Build desktop artifacts
+
+One command builds every desktop artifact for the machine you are on and copies them to `artifacts/desktop`:
 
 ```bash
-# Desktop (Windows)
-./gradlew :desktop:run
-./gradlew :desktop:packageMsi
+./gradlew packageDesktop
+```
 
-# Android APK
+| Host | Artifacts |
+|------|-----------|
+| Windows | `artifacts/desktop/Remote Controller Server-1.0.0.exe` and the portable app in `artifacts/desktop/Remote Controller Server-1.0.0/` |
+| macOS | `artifacts/desktop/Remote Controller Server-1.0.0.dmg` and the portable `.app` in `artifacts/desktop/Remote Controller Server-1.0.0/` |
+
+The folder name follows `name` and `version` from `version.properties`. Packaging needs a full JDK 21 that includes `jpackage` (not the Android Studio JBR). Point Gradle at it with `desktop.jdk.home` in `local.properties` or `JAVA_HOME`.
+
+```bash
+# Android APK, versioned from the same file
 ./gradlew :android:assembleDebug
 ```
 

@@ -3,7 +3,9 @@ package com.remotecontroller.desktop.executor
 import java.awt.Robot
 import java.awt.event.KeyEvent
 
-class KeyboardSimulator {
+class KeyboardSimulator(
+    private val mediaKeys: MediaKeys,
+) {
 
     private val robot = Robot().apply { setAutoDelay(30) }
 
@@ -41,13 +43,8 @@ class KeyboardSimulator {
             "ALT" -> KeyEvent.VK_ALT
             "SHIFT" -> KeyEvent.VK_SHIFT
             "WIN", "WINDOWS" -> KeyEvent.VK_WINDOWS
-            "PLAY_PAUSE" -> WindowsKeyCodes.MEDIA_PLAY_PAUSE
-            "NEXT" -> WindowsKeyCodes.MEDIA_NEXT
-            "PREVIOUS" -> WindowsKeyCodes.MEDIA_PREVIOUS
-            "STOP" -> WindowsKeyCodes.MEDIA_STOP
-            "VOLUME_UP" -> WindowsKeyCodes.VOLUME_UP
-            "VOLUME_DOWN" -> WindowsKeyCodes.VOLUME_DOWN
-            "VOLUME_MUTE" -> WindowsKeyCodes.VOLUME_MUTE
+            "PLAY_PAUSE", "NEXT", "PREVIOUS", "STOP", "VOLUME_UP", "VOLUME_DOWN", "VOLUME_MUTE" ->
+                mediaKeys.keyCode(keyName.uppercase())
             else -> resolveExtendedKey(keyName)
         }
 

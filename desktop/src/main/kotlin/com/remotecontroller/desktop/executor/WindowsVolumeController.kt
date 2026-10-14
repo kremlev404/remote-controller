@@ -2,25 +2,31 @@ package com.remotecontroller.desktop.executor
 
 class WindowsVolumeController : VolumeController {
 
-    override fun getVolumeLevel(): Int = WindowsCoreAudio.readVolumePercent() ?: 0
-
-    override fun isMuted(): Boolean = WindowsCoreAudio.readMuted() ?: false
-
-    override fun setVolumeLevel(level: Int) {
-        WindowsCoreAudio.setVolumePercent(level)
+    override suspend fun readState(): VolumeState? {
+        val (level, muted) = WindowsCoreAudio.readState() ?: return null
+        return VolumeState(level, muted)
     }
 
-    override fun volumeUp(step: Int) {
-        val current = getVolumeLevel()
+    override suspend fun setVolumeLevel(level: Int) {
+        if (!WindowsCoreAudio.setVolumePercent(level)) {
+            println("[WindowsCoreAudio] failed to set volume to $level%")
+        }
+    }
+
+    override suspend fun volumeUp(step: Int) {
+        val current = readState()?.level ?: return
         setVolumeLevel((current + step).coerceAtMost(100))
     }
 
-    override fun volumeDown(step: Int) {
-        val current = getVolumeLevel()
+    override suspend fun volumeDown(step: Int) {
+        val current = readState()?.level ?: return
         setVolumeLevel((current - step).coerceAtLeast(0))
     }
 
-    override fun toggleMute() {
-        WindowsCoreAudio.setMuted(!isMuted())
+    override suspend fun toggleMute() {
+        val muted = readState()?.muted ?: return
+        if (!WindowsCoreAudio.setMuted(!muted)) {
+            println("[WindowsCoreAudio] failed to toggle mute")
+        }
     }
 }

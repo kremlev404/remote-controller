@@ -6,8 +6,8 @@ import java.util.concurrent.TimeUnit
  * Best-effort inbound rule so a phone on the LAN can reach the server.
  * Adding a rule needs an elevated process; when that fails the caller surfaces a warning.
  */
-internal object WindowsFirewall {
-    fun allowIncomingTcp(port: Int): String? {
+internal object WindowsFirewall : IncomingFirewall {
+    override fun allowIncomingTcp(port: Int): String? {
         val ruleName = "Remote Controller Server"
         if (runNetsh("advfirewall", "firewall", "show", "rule", "name=$ruleName") == 0) {
             return null
