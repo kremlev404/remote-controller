@@ -1,12 +1,12 @@
 package com.remotecontroller.desktop
 
-import com.remotecontroller.desktop.ui.RemoteServerAppIcon
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ApplicationScope
@@ -15,10 +15,10 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.remotecontroller.desktop.di.desktopAppModule
-import com.remotecontroller.desktop.AppVersion
+import com.remotecontroller.desktop.platform.applySystemTitleBar
 import com.remotecontroller.desktop.server.ServerLifecycle
 import com.remotecontroller.desktop.ui.DesktopApp
-import org.koin.compose.KoinContext
+import com.remotecontroller.desktop.ui.RemoteServerAppIcon
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
@@ -50,7 +50,6 @@ fun main() {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun ApplicationScope.ApplicationContent(
     windowVisible: Boolean,
@@ -58,28 +57,30 @@ private fun ApplicationScope.ApplicationContent(
     onExitApplication: () -> Unit,
     onShowWindow: () -> Unit,
 ) {
-    KoinContext {
-        val appIcon = rememberVectorPainter(RemoteServerAppIcon)
+    val appIcon = rememberVectorPainter(RemoteServerAppIcon)
 
-        if (windowVisible) {
-            Window(
-                onCloseRequest = onHideWindow,
-                title = "${AppVersion.NAME} ${AppVersion.VERSION}",
-                icon = appIcon,
-                state = rememberWindowState(width = 480.dp, height = 916.dp),
-            ) {
-                DesktopApp()
-            }
-        }
-
-        Tray(
+    if (windowVisible) {
+        Window(
+            onCloseRequest = onHideWindow,
+            title = "${AppVersion.NAME} ${AppVersion.VERSION}",
             icon = appIcon,
-            tooltip = "Remote Controller Server is running",
-            onAction = onShowWindow,
-            menu = {
-                Item("Show", onClick = onShowWindow)
-                Item("Exit", onClick = onExitApplication)
-            },
-        )
+            state = rememberWindowState(width = 480.dp, height = 916.dp),
+        ) {
+            val darkTheme = isSystemInDarkTheme()
+            LaunchedEffect(darkTheme) {
+                window.applySystemTitleBar(darkTheme)
+            }
+            DesktopApp()
+        }
     }
+
+    Tray(
+        icon = appIcon,
+        tooltip = "Remote Controller Server is running",
+        onAction = onShowWindow,
+        menu = {
+            Item("Show", onClick = onShowWindow)
+            Item("Exit", onClick = onExitApplication)
+        },
+    )
 }

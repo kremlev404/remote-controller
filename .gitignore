@@ -8,7 +8,7 @@ local.properties
 /artifacts
 # Log/OS Files
 *.log
-.kotlin
+.kotlin/
 
 # Android Studio generated files and folders
 captures/

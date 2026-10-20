@@ -12,6 +12,7 @@ import com.remotecontroller.shared.network.RemoteProtocol
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
 import io.ktor.server.engine.EmbeddedServer
+import io.ktor.server.engine.connector
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.netty.NettyApplicationEngine
@@ -19,11 +20,11 @@ import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
-import io.ktor.server.websocket.DefaultWebSocketServerSession
+import io.ktor.server.websocket.WebSocketServerSession
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.pingPeriod
 import io.ktor.server.websocket.timeout
-import io.ktor.server.websocket.webSocket
+import io.ktor.server.websocket.webSocketRaw
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CancellationException
@@ -70,15 +71,41 @@ class CommandServer(
     @Volatile
     private var volumeSnapshot = VolumeSnapshot(level = -1, muted = false)
 
+    @Volatile
+    private var listenHost = "127.0.0.1"
+
     val localAddresses: List<String>
         get() = readCandidates().map { it.address }
 
     val recommendedAddress: String?
-        get() = readCandidates().filter { it.score > 0 }.maxByOrNull { it.score }?.address
+        get() = preferredPrivateHost()
 
     suspend fun start() {
         lifecycle.withLock { session = session.copy(shutdown = false) }
         bringUp("initial start")
+    }
+
+    suspend fun restart() {
+        lifecycle.withLock {
+            if (session.shutdown) return
+            clearClientsLocked()
+            session = session.copy(phase = KtorServerState.Restarting, lastError = null)
+            publishRuntimeLocked()
+            stopEngineLocked()
+        }
+        bringUp("manual restart")
+    }
+
+    suspend fun requestFirewallAccess() {
+        withContext(Dispatchers.IO) {
+            firewall.requestAccess(port)
+        }
+        repeat(FIREWALL_SETTLE_POLLS) {
+            refreshFirewall()
+            val granted = lifecycle.withLock { session.warning == null }
+            if (granted) return
+            delay(FIREWALL_SETTLE_DELAY_MS.milliseconds)
+        }
     }
 
     suspend fun stop() {
@@ -105,7 +132,21 @@ class CommandServer(
     }
 
     suspend fun refreshStatus() {
-        lifecycle.withLock { publishRuntimeLocked() }
+        val rebind = lifecycle.withLock {
+            publishRuntimeLocked()
+            val desired = preferredPrivateHost()
+                ?: session.bindHost?.takeUnless { it == WILDCARD_HOST }
+                ?: WILDCARD_HOST
+            session.phase == KtorServerState.Running &&
+                session.engine != null &&
+                session.bindHost != desired
+        }
+        if (rebind) {
+            log("private network changed, rebinding Ktor")
+            restart()
+            return
+        }
+        refreshFirewall()
     }
 
     private suspend fun bringUp(reason: String) {
@@ -114,12 +155,13 @@ class CommandServer(
             if (session.engine != null && session.phase == KtorServerState.Running) return
             if (session.engine != null) stopEngineLocked()
 
-            session = session.copy(phase = KtorServerState.Starting, lastError = null)
+            val host = preferredPrivateHost() ?: WILDCARD_HOST
+            session = session.copy(phase = KtorServerState.Starting, lastError = null, bindHost = host)
             publishRuntimeLocked()
-            log("starting Ktor ($reason) on 0.0.0.0:$port")
+            log("starting Ktor ($reason) on $host:$port")
 
             try {
-                bindServer()
+                bindServer(host)
                 session.engine != null
             } catch (error: CancellationException) {
                 withContext(NonCancellable) { stopEngineLocked() }
@@ -152,7 +194,7 @@ class CommandServer(
                     probeFailures = 0,
                 )
                 publishRuntimeLocked()
-                log("listening on 0.0.0.0:$port, recommended ${recommendedAddress ?: "no LAN address"}")
+                log("listening on ${session.bindHost ?: WILDCARD_HOST}:$port, recommended ${recommendedAddress ?: "no LAN address"}")
                 true
             }
         }
@@ -164,15 +206,16 @@ class CommandServer(
         }
     }
 
-    private suspend fun bindServer() {
+    private suspend fun bindServer(host: String) {
         var lastFailure: Throwable? = null
         repeat(BIND_ATTEMPTS) { attempt ->
             try {
                 // createEngine() is a plain function so Ktor does not parent the server
                 // on this coroutine. startSuspend uses a blocking dispatcher; start() from
                 // Dispatchers.IO never returns because the server job outlives the caller.
-                val started = createEngine().startSuspend(wait = false)
-                session = session.copy(engine = started)
+                val started = createEngine(host).startSuspend(wait = false)
+                listenHost = if (host == WILDCARD_HOST) "127.0.0.1" else host
+                session = session.copy(engine = started, bindHost = host)
                 return
             } catch (error: CancellationException) {
                 throw error
@@ -186,8 +229,17 @@ class CommandServer(
         throw lastFailure ?: IllegalStateException("Failed to bind port $port")
     }
 
-    private fun createEngine(): EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration> =
-        embeddedServer(Netty, host = "0.0.0.0", port = port) {
+    private fun createEngine(host: String): EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration> {
+        val listenPort = port
+        return embeddedServer(Netty, configure = {
+            connector {
+                this.host = host
+                this.port = listenPort
+            }
+            channelPipelineConfig = {
+                SocketFrames.attach(channel())
+            }
+        }) {
             install(ContentNegotiation) {
                 json(RemoteJson.json)
             }
@@ -207,17 +259,20 @@ class CommandServer(
                     )
                 }
 
-                webSocket(RemoteProtocol.WS_PATH) {
+                webSocketRaw(RemoteProtocol.WS_PATH) {
                     val slot = registerClient(this)
                     log("client connected (${slot.name})")
-                    publishVolumeStatus()
+                    var outcome = "closed"
 
                     try {
-                        slot.sendMessage(ServerMessage.Status(currentStatus()))
+                        val status = currentStatus()
+                        slot.sendMessage(ServerMessage.Status(status))
+                        log("status sent to ${slot.name}")
+                        publishVolumeStatus()
 
                         for (frame in incoming) {
-                            if (frame is Frame.Text) {
-                                runCatching {
+                            when (frame) {
+                                is Frame.Text -> runCatching {
                                     handleCommand(slot, frame.readText())
                                 }.onFailure { error ->
                                     log("command failed: ${error.message}", error)
@@ -227,20 +282,34 @@ class CommandServer(
                                         )
                                     }
                                 }
+                                is Frame.Ping -> runCatching { SocketFrames.sendPong(slot.endpoint, frame.data) }
+                                is Frame.Close -> break
+                                else -> Unit
                             }
                         }
                     } catch (error: CancellationException) {
+                        if (!slot.closedFromDesktop) {
+                            outcome = "dropped (${error.message ?: error.javaClass.simpleName})"
+                        }
                         throw error
                     } catch (error: Exception) {
-                        log("client socket closed: ${error.message}")
+                        if (!slot.closedFromDesktop) {
+                            outcome = error.message ?: "error"
+                            log("client socket closed: $outcome", error)
+                        }
                     } finally {
+                        if (slot.closedFromDesktop) outcome = "closed from desktop"
                         unregisterClient(slot)
-                        log("client disconnected (${slot.name})")
+                        log(
+                            "client disconnected (${slot.name}): $outcome",
+                            isError = outcome != "closed" && outcome != "closed from desktop",
+                        )
                         publishVolumeStatus()
                     }
                 }
             }
         }
+    }
 
     private suspend fun awaitHealthy(): Boolean {
         repeat(HEALTHY_POLLS) { attempt ->
@@ -251,9 +320,10 @@ class CommandServer(
     }
 
     private suspend fun probeLocalHealth(): Boolean = withContext(Dispatchers.IO) {
+        val target = listenHost
         runCatching {
             Socket().use { socket ->
-                socket.connect(InetSocketAddress("127.0.0.1", port), PROBE_TIMEOUT_MS.toInt())
+                socket.connect(InetSocketAddress(target, port), PROBE_TIMEOUT_MS.toInt())
             }
             true
         }.getOrDefault(false)
@@ -270,22 +340,27 @@ class CommandServer(
     }
 
     private suspend fun ensureFirewallRule() {
-        val alreadyChecked = lifecycle.withLock {
-            if (session.firewallChecked) return@withLock true
-            session = session.copy(firewallChecked = true)
-            false
-        }
-        if (alreadyChecked) return
-
         val firewallWarning = withContext(Dispatchers.IO) {
             firewall.allowIncomingTcp(port)
-        } ?: return
+        }
+        applyFirewallWarning(firewallWarning)
+    }
 
-        lifecycle.withLock {
+    private suspend fun refreshFirewall() {
+        val firewallWarning = withContext(Dispatchers.IO) {
+            firewall.accessWarning(port)
+        }
+        applyFirewallWarning(firewallWarning)
+    }
+
+    private suspend fun applyFirewallWarning(firewallWarning: String?) {
+        val changed = lifecycle.withLock {
+            if (session.warning == firewallWarning) return@withLock false
             session = session.copy(warning = firewallWarning)
             publishRuntimeLocked()
+            true
         }
-        log(firewallWarning)
+        if (changed && firewallWarning != null) log(firewallWarning, isError = true)
     }
 
     fun observeSystemVolume(): Flow<ServerStatus> = flow {
@@ -346,12 +421,13 @@ class CommandServer(
         broadcast(ServerMessage.Status(newStatus))
     }
 
-    private fun registerClient(session: DefaultWebSocketServerSession): ClientSlot {
-        val remote = session.call.request.local.remoteHost.ifBlank { "Client" }
+    private fun registerClient(session: WebSocketServerSession): ClientSlot {
+        val point = session.call.request.local
+        val remote = point.remoteAddress.ifBlank { "Client" }
         val slot = synchronized(clients) {
             ClientSlot(
                 id = nextClientId++,
-                session = session,
+                endpoint = SocketFrames.endpoint(remote, point.remotePort),
                 name = remote,
             ).also(clients::add)
         }
@@ -362,6 +438,15 @@ class CommandServer(
     private fun unregisterClient(slot: ClientSlot) {
         synchronized(clients) { clients.remove(slot) }
         publishClients()
+    }
+
+    suspend fun disconnectClient(id: Long) {
+        val slot = synchronized(clients) {
+            clients.firstOrNull { it.id == id }?.also { it.closedFromDesktop = true }
+        } ?: return
+        log("closing ${slot.name}")
+        runCatching { slot.sendMessage(ServerMessage.Disconnect()) }
+        SocketFrames.close(slot.endpoint)
     }
 
     private suspend fun broadcast(message: ServerMessage) {
@@ -387,14 +472,16 @@ class CommandServer(
 
     private fun clientCount(): Int = synchronized(clients) { clients.size }
 
-    private fun clientNames(): List<String> = synchronized(clients) { clients.map { it.name } }
+    private fun connectedClients(): List<ConnectedClient> = synchronized(clients) {
+        clients.map { ConnectedClient(id = it.id, name = it.name) }
+    }
 
     private fun publishClients() {
-        val names = clientNames()
+        val connected = connectedClients()
         runtimeStatus.update { current ->
-            current.copy(connectedClients = names.size, clientNames = names)
+            current.copy(connectedClients = connected.size, clients = connected)
         }
-        status.update { current -> current.copy(connectedClients = names.size) }
+        status.update { current -> current.copy(connectedClients = connected.size) }
     }
 
     private fun sanitizeClientName(name: String): String =
@@ -403,15 +490,17 @@ class CommandServer(
     private fun publishRuntimeLocked() {
         val snapshot = session
         val addresses = readCandidates()
-        val reachable = addresses.filter { it.score > 0 }
+        val reachable = addresses
         runtimeStatus.update { current ->
             ServerRuntimeStatus(
                 ktorState = snapshot.phase,
                 networkState = if (reachable.isEmpty()) NetworkState.Unavailable else NetworkState.Available,
                 connectedClients = clientCount(),
-                clientNames = clientNames(),
+                clients = connectedClients(),
                 localAddresses = addresses.map { it.address },
-                recommendedAddress = reachable.maxByOrNull { it.score }?.address,
+                recommendedAddress = reachable.maxWithOrNull(
+                    compareBy<LocalAddress> { it.score }.thenBy { it.address },
+                )?.address,
                 lastError = snapshot.lastError,
                 warning = snapshot.warning,
                 restartCount = snapshot.restarts,
@@ -429,39 +518,44 @@ class CommandServer(
         }.sortedByDescending { it.score }
     }
 
+    private fun preferredPrivateHost(): String? =
+        readCandidates().maxWithOrNull(compareBy<LocalAddress> { it.score }.thenBy { it.address })?.address
+
     private fun addressesOf(nic: NetworkInterface): List<LocalAddress> {
-        if (!nic.isUp || nic.isLoopback) return emptyList()
-        val label = "${nic.displayName} ${nic.name}"
-        return nic.inetAddresses.toList()
-            .filterIsInstance<Inet4Address>()
-            .filter { !it.isLoopbackAddress && !it.isLinkLocalAddress }
-            .mapNotNull { inet ->
-                val host = inet.hostAddress ?: return@mapNotNull null
-                LocalAddress(
-                    address = host,
-                    score = scoreAddress(nic, label, host),
-                )
-            }
+        if (!nic.isUp || nic.isLoopback || runCatching { nic.isPointToPoint }.getOrDefault(false)) return emptyList()
+        val label = "${nic.displayName} ${nic.name}".lowercase()
+        if (VIRTUAL_MARKERS.any { marker -> label.contains(marker) }) return emptyList()
+        return nic.interfaceAddresses.mapNotNull { binding ->
+            val inet = binding.address as? Inet4Address ?: return@mapNotNull null
+            if (inet.isLoopbackAddress || inet.isLinkLocalAddress) return@mapNotNull null
+            val host = inet.hostAddress ?: return@mapNotNull null
+            if (!isPrivateLan(host)) return@mapNotNull null
+            val prefix = binding.networkPrefixLength.toInt()
+            if (prefix in 30..32) return@mapNotNull null
+            LocalAddress(address = host, score = scoreAddress(label, host))
+        }
     }
 
-    private fun scoreAddress(nic: NetworkInterface, label: String, address: String): Int {
-        val name = label.lowercase()
-        var score = 0
-        if (VIRTUAL_MARKERS.any { marker -> name.contains(marker) }) score -= 1_000
-        if (runCatching { nic.isPointToPoint }.getOrDefault(false)) score -= 500
-        if (name.contains("wi-fi") || name.contains("wifi") || name.contains("wlan") || name.contains("wireless")) {
+    private fun isPrivateLan(address: String): Boolean {
+        if (address.startsWith("192.168.") || address.startsWith("10.")) return true
+        if (!address.startsWith("172.")) return false
+        val second = address.split('.').getOrNull(1)?.toIntOrNull() ?: return false
+        return second in 16..31
+    }
+
+    private fun scoreAddress(label: String, address: String): Int {
+        var score = 1
+        if (label.contains("wi-fi") || label.contains("wifi") || label.contains("wlan") || label.contains("wireless")) {
             score += 300
         }
-        if (name.contains("ethernet") || name.contains("lan")) score += 200
-        when {
-            address.startsWith("192.168.") -> score += 50
-            address.startsWith("10.") -> score += 40
-            address.startsWith("172.") -> {
-                val second = address.split('.').getOrNull(1)?.toIntOrNull()
-                if (second != null && second in 16..31) score += 30
-            }
-        }
+        if (label.contains("ethernet") || label.contains("lan")) score += 200
+        if (address.startsWith("192.168.")) score += 50
         return score
+    }
+
+    private fun clearClientsLocked() {
+        synchronized(clients) { clients.clear() }
+        publishClients()
     }
 
     private fun describeBindFailure(error: Throwable): String {
@@ -472,8 +566,9 @@ class CommandServer(
         return error.message ?: "Failed to start Ktor server"
     }
 
-    private fun log(message: String, error: Throwable? = null) {
+    private fun log(message: String, error: Throwable? = null, isError: Boolean = error != null) {
         println("[CommandServer] $message")
+        ServerLog.record(message, error = isError)
         error?.printStackTrace()
     }
 
@@ -485,19 +580,21 @@ class CommandServer(
         val lastError: String? = null,
         val warning: String? = null,
         val shutdown: Boolean = false,
-        val firewallChecked: Boolean = false,
+        val bindHost: String? = null,
     )
 
     private class ClientSlot(
         val id: Long,
-        val session: DefaultWebSocketServerSession,
+        val endpoint: String,
         var name: String,
     ) {
+        @Volatile
+        var closedFromDesktop: Boolean = false
         private val sendLock = Mutex()
 
         suspend fun sendMessage(message: ServerMessage) {
             sendLock.withLock {
-                session.send(Frame.Text(RemoteJson.encodeMessage(message)))
+                SocketFrames.sendText(endpoint, RemoteJson.encodeMessage(message))
             }
         }
     }
@@ -520,6 +617,9 @@ class CommandServer(
         const val PROBE_TIMEOUT_MS = 700L
         const val CLIENT_NAME_MAX = 48
         const val VOLUME_POLL_INTERVAL_MS = 400L
+        const val FIREWALL_SETTLE_POLLS = 8
+        const val FIREWALL_SETTLE_DELAY_MS = 500L
+        const val WILDCARD_HOST = "0.0.0.0"
 
         val VIRTUAL_MARKERS = listOf(
             "virtual",
@@ -533,13 +633,31 @@ class CommandServer(
             "vpn",
             "tap-",
             "tun",
+            "wintun",
+            "tunnel",
             "loopback",
             "pseudo",
             "bluetooth",
             "nordlynx",
             "wireguard",
+            "tailscale",
             "zerotier",
             "hamachi",
+            "anyconnect",
+            "cisco",
+            "openvpn",
+            "mullvad",
+            "expressvpn",
+            "surfshark",
+            "proton",
+            "warp",
+            "fortinet",
+            "forticlient",
+            "globalprotect",
+            "pulse secure",
+            "zscaler",
+            "netskope",
+            "cloudflare",
         )
     }
 }

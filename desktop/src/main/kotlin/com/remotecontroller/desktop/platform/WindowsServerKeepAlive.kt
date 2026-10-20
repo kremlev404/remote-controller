@@ -14,7 +14,8 @@ import com.sun.jna.platform.win32.WinNT
  * after the window is closed and while the session is locked.
  */
 internal class WindowsServerKeepAlive : ServerKeepAlive {
-    private val library = Native.load("PowrProf", WindowsPower::class.java)
+    // PowerCreateRequest lives in kernel32. PowrProf does not export it.
+    private val library = Native.load("kernel32", WindowsPower::class.java)
     private val reasonText = wideString(REASON)
     private val context = ReasonContext().apply { simpleReason = reasonText }
     private var request: Pointer? = null

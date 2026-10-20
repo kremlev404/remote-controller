@@ -7,7 +7,6 @@ import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.plugins.ExtensionAware
 import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.getByType
-import org.jetbrains.compose.ComposePlugin
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 
 internal object Sdk {
@@ -37,14 +36,13 @@ internal fun Project.configureKmpTargets() {
 }
 
 internal fun Project.addComposeDependencies() {
-    val compose = ComposePlugin.Dependencies(this)
     extensions.configure<KotlinMultiplatformExtension> {
         sourceSets.named("commonMain") {
             dependencies {
-                implementation(compose.runtime)
-                implementation(compose.foundation)
-                implementation(compose.material3)
-                implementation(compose.ui)
+                implementation(libs.findLibrary("compose-runtime").get())
+                implementation(libs.findLibrary("compose-foundation").get())
+                implementation(libs.findLibrary("compose-material3").get())
+                implementation(libs.findLibrary("compose-ui").get())
             }
         }
     }

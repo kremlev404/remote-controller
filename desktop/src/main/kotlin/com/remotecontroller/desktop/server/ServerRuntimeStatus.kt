@@ -3,6 +3,7 @@ package com.remotecontroller.desktop.server
 enum class KtorServerState {
     Starting,
     Running,
+    Restarting,
     Recovering,
     Stopped,
     Error,
@@ -13,11 +14,16 @@ enum class NetworkState {
     Unavailable,
 }
 
+data class ConnectedClient(
+    val id: Long,
+    val name: String,
+)
+
 data class ServerRuntimeStatus(
     val ktorState: KtorServerState = KtorServerState.Starting,
     val networkState: NetworkState = NetworkState.Unavailable,
     val connectedClients: Int = 0,
-    val clientNames: List<String> = emptyList(),
+    val clients: List<ConnectedClient> = emptyList(),
     val localAddresses: List<String> = emptyList(),
     val recommendedAddress: String? = null,
     val lastError: String? = null,
@@ -25,9 +31,13 @@ data class ServerRuntimeStatus(
     val restartCount: Int = 0,
     val port: Int,
 ) {
+    val clientNames: List<String>
+        get() = clients.map { it.name }
+
     val statusMessage: String
         get() = when (ktorState) {
             KtorServerState.Starting -> "Starting Ktor server…"
+            KtorServerState.Restarting -> "Restarting server…"
             KtorServerState.Running -> when {
                 networkState == NetworkState.Unavailable -> "Server running, no network adapter"
                 clientNames.isNotEmpty() -> "Running · ${clientNames.joinToString(", ")}"

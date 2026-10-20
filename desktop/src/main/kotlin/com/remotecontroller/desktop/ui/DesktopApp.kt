@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -18,23 +19,31 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -42,19 +51,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.remotecontroller.desktop.server.ConnectedClient
 import com.remotecontroller.desktop.AppVersion
-import com.remotecontroller.desktop.server.KtorServerState
-import com.remotecontroller.desktop.server.NetworkState
-import com.remotecontroller.desktop.server.ServerRuntimeStatus
-import com.remotecontroller.shared.model.RemoteKeys
+import com.remotecontroller.desktop.server.ServerLogLine
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun DesktopApp(viewModel: DesktopViewModel = koinViewModel()) {
     val uiState by viewModel.uiState.collectAsState()
 
-    MaterialTheme {
+    DesktopTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
@@ -63,16 +71,22 @@ fun DesktopApp(viewModel: DesktopViewModel = koinViewModel()) {
                     .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                HeaderSection(runtime = uiState.runtime)
+                HeaderSection(server = uiState.server)
 
-                ServerStatusCard(runtime = uiState.runtime)
+                ServerStatusCard(
+                    server = uiState.server,
+                    firewallRequestInProgress = uiState.firewallRequestInProgress,
+                    onRestart = viewModel::restartServer,
+                    onDisconnectClient = viewModel::disconnectClient,
+                    onAllowFirewall = viewModel::allowFirewall,
+                )
 
                 StatusCard(uiState)
 
                 ConnectionCard(
-                    addresses = uiState.localAddresses,
-                    recommendedAddress = uiState.recommendedAddress,
-                    port = RemoteKeys.DEFAULT_PORT,
+                    addresses = uiState.server.addresses,
+                    recommendedAddress = uiState.server.recommendedAddress,
+                    port = uiState.server.port,
                 )
 
                 LastCommandCard(uiState.lastCommand)
@@ -86,13 +100,19 @@ fun DesktopApp(viewModel: DesktopViewModel = koinViewModel()) {
                     errorMessage = uiState.startupError,
                     onEnabledChange = viewModel::setLaunchAtStartup,
                 )
+
+                ConnectionLogCard(
+                    lines = uiState.logs,
+                    limit = uiState.logLimit,
+                    onLimitChange = viewModel::setLogLimit,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun HeaderSection(runtime: ServerRuntimeStatus?) {
+private fun HeaderSection(server: DesktopServerState) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -110,7 +130,7 @@ private fun HeaderSection(runtime: ServerRuntimeStatus?) {
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = runtime?.statusMessage ?: "Starting…",
+                text = server.headline,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -119,42 +139,51 @@ private fun HeaderSection(runtime: ServerRuntimeStatus?) {
 }
 
 @Composable
-private fun ServerStatusCard(runtime: ServerRuntimeStatus?) {
+private fun ServerStatusCard(
+    server: DesktopServerState,
+    firewallRequestInProgress: Boolean,
+    onRestart: () -> Unit,
+    onDisconnectClient: (Long) -> Unit,
+    onAllowFirewall: () -> Unit,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                text = "Server Status",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Server Status",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                RestartButton(
+                    restarting = server.restartInProgress,
+                    onClick = onRestart,
+                )
+            }
 
             StatusRow(
                 label = "Ktor",
-                value = runtime?.ktorState?.label() ?: "Starting",
-                color = runtime?.ktorState?.color() ?: MaterialTheme.colorScheme.outline,
+                value = server.ktorLabel,
+                color = server.ktorColor(),
             )
             StatusRow(
                 label = "Network",
-                value = runtime?.networkMessage ?: "Checking…",
-                color = runtime?.networkState?.color() ?: MaterialTheme.colorScheme.outline,
-                icon = if (runtime?.networkState == NetworkState.Available) Icons.Default.Wifi else Icons.Default.WifiOff,
+                value = server.networkLabel,
+                color = server.networkColor(),
+                icon = if (server.networkAvailable) Icons.Default.Wifi else Icons.Default.WifiOff,
             )
-            StatusRow(
-                label = "Clients",
-                value = runtime?.clientNames?.takeIf { it.isNotEmpty() }?.joinToString(", ")
-                    ?: "Disconnected",
-                color = if (runtime?.clientNames?.isNotEmpty() == true) {
-                    Color(0xFF2E7D32)
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                icon = if (runtime?.clientNames?.isNotEmpty() == true) Icons.Default.Link else Icons.Default.LinkOff,
+            ClientsRow(
+                clients = server.clients,
+                onDisconnect = onDisconnectClient,
             )
 
-            runtime?.lastError?.let { error ->
+            server.error?.let { error ->
                 Text(
                     text = error,
                     style = MaterialTheme.typography.bodySmall,
@@ -162,20 +191,147 @@ private fun ServerStatusCard(runtime: ServerRuntimeStatus?) {
                 )
             }
 
-            runtime?.warning?.let { warning ->
+            server.warning?.let { warning ->
                 Text(
                     text = warning,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
+                OutlinedButton(
+                    onClick = onAllowFirewall,
+                    enabled = !firewallRequestInProgress,
+                ) {
+                    Text(if (firewallRequestInProgress) "Waiting for Windows…" else "Allow again")
+                }
             }
 
-            if ((runtime?.restartCount ?: 0) > 0) {
+            if (server is DesktopServerState.Running && server.restartCount > 0) {
                 Text(
-                    text = "Auto-recovered ${runtime?.restartCount} time(s)",
+                    text = "Auto-recovered ${server.restartCount} time(s)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RestartButton(
+    restarting: Boolean,
+    onClick: () -> Unit,
+) {
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+        FilledTonalButton(
+            onClick = onClick,
+            enabled = !restarting,
+            modifier = Modifier.height(32.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.Refresh,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = if (restarting) "Restarting" else "Restart",
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ClientsRow(
+    clients: List<ConnectedClient>,
+    onDisconnect: (Long) -> Unit,
+) {
+    val connected = clients.isNotEmpty()
+    val color = if (connected) statusOkColor() else MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        modifier = Modifier.fillMaxWidth().height(28.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .background(color, CircleShape),
+        )
+        Text(
+            text = "Clients",
+            modifier = Modifier.width(64.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Icon(
+            imageVector = if (connected) Icons.Default.Link else Icons.Default.LinkOff,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = color,
+        )
+        if (!connected) {
+            Text(
+                text = "Disconnected",
+                style = MaterialTheme.typography.bodyMedium,
+                color = color,
+            )
+        } else {
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                clients.forEach { client ->
+                    ClientChip(
+                        client = client,
+                        onDisconnect = onDisconnect,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ClientChip(
+    client: ConnectedClient,
+    onDisconnect: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val color = statusOkColor()
+    Surface(
+        modifier = modifier.height(26.dp),
+        shape = RoundedCornerShape(13.dp),
+        color = color.copy(alpha = 0.16f),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 10.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = client.name,
+                modifier = Modifier.weight(1f, fill = false),
+                style = MaterialTheme.typography.labelMedium,
+                color = color,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                IconButton(
+                    onClick = { onDisconnect(client.id) },
+                    modifier = Modifier.size(18.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Disconnect ${client.name}",
+                        modifier = Modifier.size(12.dp),
+                        tint = color,
+                    )
+                }
             }
         }
     }
@@ -236,7 +392,7 @@ private fun StatusCard(uiState: DesktopUiState) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.VolumeUp, contentDescription = null)
+                    Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("System Volume")
                 }
@@ -434,6 +590,62 @@ private fun StartupCard(
 }
 
 @Composable
+private fun ConnectionLogCard(
+    lines: List<ServerLogLine>,
+    limit: Int,
+    onLimitChange: (Int) -> Unit,
+) {
+    val shown = lines.takeLast(limit)
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Connection log",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(1, 5, 10).forEach { count ->
+                        FilterChip(
+                            selected = limit == count,
+                            onClick = { onLimitChange(count) },
+                            label = { Text(count.toString()) },
+                        )
+                    }
+                }
+            }
+            if (shown.isEmpty()) {
+                Text(
+                    text = "No connection logs yet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                shown.forEach { line ->
+                    Text(
+                        text = "${line.time}  ${line.message}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = if (line.error) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun LastCommandCard(command: String?) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -453,24 +665,19 @@ private fun LastCommandCard(command: String?) {
     }
 }
 
-private fun KtorServerState.label(): String = when (this) {
-    KtorServerState.Starting -> "Starting"
-    KtorServerState.Running -> "Running"
-    KtorServerState.Recovering -> "Recovering"
-    KtorServerState.Stopped -> "Stopped"
-    KtorServerState.Error -> "Error"
+@Composable
+private fun DesktopServerState.ktorColor(): Color = when (this) {
+    is DesktopServerState.Running -> statusOkColor()
+    is DesktopServerState.Starting,
+    is DesktopServerState.Restarting,
+    is DesktopServerState.Recovering,
+    -> statusPendingColor()
+    is DesktopServerState.Stopped -> MaterialTheme.colorScheme.onSurfaceVariant
+    is DesktopServerState.Failed -> MaterialTheme.colorScheme.error
 }
 
 @Composable
-private fun KtorServerState.color(): Color = when (this) {
-    KtorServerState.Running -> Color(0xFF2E7D32)
-    KtorServerState.Starting, KtorServerState.Recovering -> Color(0xFFF9A825)
-    KtorServerState.Stopped -> MaterialTheme.colorScheme.onSurfaceVariant
-    KtorServerState.Error -> MaterialTheme.colorScheme.error
-}
-
-@Composable
-private fun NetworkState.color(): Color = when (this) {
-    NetworkState.Available -> Color(0xFF2E7D32)
-    NetworkState.Unavailable -> MaterialTheme.colorScheme.error
+private fun DesktopServerState.networkColor(): Color = when (this) {
+    is DesktopServerState.Starting -> MaterialTheme.colorScheme.outline
+    else -> if (networkAvailable) statusOkColor() else MaterialTheme.colorScheme.error
 }

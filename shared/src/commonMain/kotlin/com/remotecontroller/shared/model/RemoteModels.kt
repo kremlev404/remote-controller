@@ -116,6 +116,10 @@ sealed interface ServerMessage {
     @Serializable
     @SerialName("error")
     data class Error(val message: String) : ServerMessage
+
+    @Serializable
+    @SerialName("disconnect")
+    data class Disconnect(val reason: String = "Closed from the PC") : ServerMessage
 }
 
 object RemoteKeys {

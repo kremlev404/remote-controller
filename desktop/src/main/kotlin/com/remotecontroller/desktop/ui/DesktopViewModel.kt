@@ -3,8 +3,8 @@ package com.remotecontroller.desktop.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.remotecontroller.desktop.server.CommandServer
-import com.remotecontroller.desktop.server.KtorServerState
-import com.remotecontroller.desktop.server.ServerRuntimeStatus
+import com.remotecontroller.desktop.server.ServerLog
+import com.remotecontroller.desktop.server.ServerLogLine
 import com.remotecontroller.desktop.startup.StartupManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,26 +12,20 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class DesktopUiState(
-    val runtime: ServerRuntimeStatus? = null,
-    val connectedClients: Int = 0,
+    val server: DesktopServerState = initialDesktopServerState(),
     val volumeLevel: Int = 0,
     val isMuted: Boolean = false,
     val lastCommand: String? = null,
-    val localAddresses: List<String> = emptyList(),
-    val recommendedAddress: String? = null,
     val launchAtStartup: Boolean = false,
     val startupAvailable: Boolean = false,
     val startupTitle: String = "",
     val startupEnabledHint: String = "",
     val startupUnavailableHint: String = "",
     val startupError: String? = null,
-) {
-    val isRunning: Boolean
-        get() = runtime?.ktorState == KtorServerState.Running
-
-    val serverRestarts: Int
-        get() = runtime?.restartCount ?: 0
-}
+    val firewallRequestInProgress: Boolean = false,
+    val logs: List<ServerLogLine> = emptyList(),
+    val logLimit: Int = 5,
+)
 
 class DesktopViewModel(
     private val commandServer: CommandServer,
@@ -43,9 +37,7 @@ class DesktopViewModel(
 
     init {
         uiState.value = DesktopUiState(
-            runtime = commandServer.runtimeStatus.value,
-            localAddresses = commandServer.localAddresses,
-            recommendedAddress = commandServer.recommendedAddress,
+            server = commandServer.runtimeStatus.value.toDesktopServerState(),
             launchAtStartup = startupManager.isEnabled(),
             startupAvailable = startupManager.canConfigure(),
             startupTitle = startupManager.title,
@@ -56,13 +48,14 @@ class DesktopViewModel(
         viewModelScope.launch {
             commandServer.runtimeStatus.collect { runtime ->
                 uiState.update { current ->
-                    current.copy(
-                        runtime = runtime,
-                        connectedClients = runtime.connectedClients,
-                        localAddresses = runtime.localAddresses,
-                        recommendedAddress = runtime.recommendedAddress,
-                    )
+                    current.copy(server = runtime.toDesktopServerState())
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            ServerLog.lines.collect { lines ->
+                uiState.update { current -> current.copy(logs = lines) }
             }
         }
 
@@ -70,7 +63,6 @@ class DesktopViewModel(
             commandServer.status.collect { serverStatus ->
                 uiState.update { current ->
                     current.copy(
-                        connectedClients = serverStatus.connectedClients,
                         volumeLevel = serverStatus.volumeLevel,
                         isMuted = serverStatus.isMuted,
                         lastCommand = serverStatus.lastCommand,
@@ -78,6 +70,36 @@ class DesktopViewModel(
                 }
             }
         }
+    }
+
+    fun restartServer() {
+        if (uiState.value.server.restartInProgress) return
+        viewModelScope.launch {
+            commandServer.restart()
+        }
+    }
+
+    fun disconnectClient(id: Long) {
+        viewModelScope.launch {
+            commandServer.disconnectClient(id)
+        }
+    }
+
+    fun allowFirewall() {
+        if (uiState.value.firewallRequestInProgress) return
+        uiState.update { it.copy(firewallRequestInProgress = true) }
+        viewModelScope.launch {
+            try {
+                commandServer.requestFirewallAccess()
+            } finally {
+                uiState.update { it.copy(firewallRequestInProgress = false) }
+            }
+        }
+    }
+
+    fun setLogLimit(limit: Int) {
+        if (limit !in LOG_LIMITS) return
+        uiState.update { it.copy(logLimit = limit) }
     }
 
     fun setLaunchAtStartup(enabled: Boolean) {
@@ -94,5 +116,9 @@ class DesktopViewModel(
                 it.copy(startupError = error.message ?: "Failed to update startup setting")
             }
         }
+    }
+
+    private companion object {
+        val LOG_LIMITS = setOf(1, 5, 10)
     }
 }

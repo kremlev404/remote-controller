@@ -5,6 +5,7 @@ import com.remotecontroller.client.data.log.logInfo
 import com.remotecontroller.client.data.log.logWarn
 import com.remotecontroller.client.data.remote.PcLink
 import com.remotecontroller.client.data.remote.PcTransport
+import com.remotecontroller.client.data.remote.SessionClosedByHost
 import com.remotecontroller.client.domain.model.NetworkMonitor
 import com.remotecontroller.client.domain.model.ConnectionState
 import com.remotecontroller.client.domain.model.PcConnection
@@ -132,6 +133,12 @@ class RemoteRepositoryImpl(
                     }
                 } catch (error: CancellationException) {
                     throw error
+                } catch (error: SessionClosedByHost) {
+                    logInfo(TAG, "session to $endpoint closed by the PC")
+                    if (!ready.isCompleted) ready.complete(Result.failure(error))
+                    publishActive(epoch, null)
+                    publishState(epoch, ConnectionState.Disconnected)
+                    return
                 } catch (error: Throwable) {
                     logWarn(TAG, "session to $endpoint ended", error)
                     gate.withLock { if (this.epoch == epoch) lastFailure = error }

@@ -31,6 +31,8 @@ interface PcTransport {
     suspend fun open(host: PcHost, port: ServerPort): PcLink
 }
 
+class SessionClosedByHost(message: String) : IllegalStateException(message)
+
 interface PcLink {
     suspend fun send(command: RemoteCommand)
     suspend fun readUntilClosed(onStatus: suspend (ServerStatus) -> Unit)
@@ -111,14 +113,16 @@ class PcSocketClient(
         }
 
         private suspend fun deliver(text: String, onStatus: suspend (ServerStatus) -> Unit) {
-            runCatching {
-                when (val message = RemoteJson.decode<ServerMessage>(text)) {
-                    is ServerMessage.Status -> onStatus(message.status)
-                    is ServerMessage.Ack -> Unit
-                    is ServerMessage.Error -> logWarn(TAG, "server error: ${message.message}")
+            val message = runCatching { RemoteJson.decode<ServerMessage>(text) }
+                .getOrElse { error ->
+                    logWarn(TAG, "ignored malformed server message", error)
+                    return
                 }
-            }.onFailure { error ->
-                logWarn(TAG, "ignored malformed server message", error)
+            when (message) {
+                is ServerMessage.Status -> onStatus(message.status)
+                is ServerMessage.Ack -> Unit
+                is ServerMessage.Error -> logWarn(TAG, "server error: ${message.message}")
+                is ServerMessage.Disconnect -> throw SessionClosedByHost(message.reason)
             }
         }
     }

@@ -29,14 +29,18 @@ kotlin {
 }
 
 tasks.withType<JavaExec>().configureEach {
-    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    jvmArgs(
+        "--enable-native-access=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+    )
 }
 
 dependencies {
     implementation(project(":shared"))
-    implementation(compose.desktop.currentOs)
-    implementation(compose.material3)
-    implementation(compose.materialIconsExtended)
+    implementation("${composeDesktopJvmArtifact()}:${libs.versions.compose.multiplatform.get()}")
+    implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.extended)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.server.core)
@@ -52,6 +56,22 @@ dependencies {
     implementation(libs.jna)
     implementation(libs.jna.platform)
     runtimeOnly(libs.slf4j.simple)
+}
+
+fun composeDesktopJvmArtifact(): String {
+    val osName = System.getProperty("os.name")
+    val osId = when {
+        osName.equals("Mac OS X", ignoreCase = true) -> "macos"
+        osName.startsWith("Win", ignoreCase = true) -> "windows"
+        osName.startsWith("Linux", ignoreCase = true) -> "linux"
+        else -> error("Unknown OS name: $osName")
+    }
+    val archId = when (val arch = System.getProperty("os.arch")) {
+        "x86_64", "amd64" -> "x64"
+        "aarch64" -> "arm64"
+        else -> error("Unsupported OS arch: $arch")
+    }
+    return "org.jetbrains.compose.desktop:desktop-jvm-$osId-$archId"
 }
 
 fun jdkHomeWithJpackage(directory: File): String? {
@@ -217,7 +237,11 @@ val desktopIsMac = desktopHostOs.contains("mac")
 compose.desktop {
     application {
         mainClass = "com.remotecontroller.desktop.MainKt"
-        jvmArgs("--enable-native-access=ALL-UNNAMED")
+        jvmArgs(
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+        )
 
         packagingJdkHome?.let { javaHome = it }
 
