@@ -2,12 +2,15 @@ package com.remotecontroller.desktop.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.remotecontroller.desktop.executor.ScreenCapturer
+import com.remotecontroller.desktop.executor.SharedDisplay
 import com.remotecontroller.desktop.server.CommandServer
 import com.remotecontroller.desktop.server.ServerLog
 import com.remotecontroller.desktop.server.ServerLogLine
 import com.remotecontroller.desktop.startup.StartupManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -25,11 +28,17 @@ data class DesktopUiState(
     val firewallRequestInProgress: Boolean = false,
     val logs: List<ServerLogLine> = emptyList(),
     val logLimit: Int = 5,
+    val displays: List<SharedDisplay> = emptyList(),
+    val selectedDisplayId: String = "",
+    val streamFps: Int = 0,
+    val streamViewers: Int = 0,
+    val streamError: String? = null,
 )
 
 class DesktopViewModel(
     private val commandServer: CommandServer,
     private val startupManager: StartupManager,
+    private val screenCapturer: ScreenCapturer,
 ) : ViewModel() {
 
     val uiState: StateFlow<DesktopUiState>
@@ -43,6 +52,11 @@ class DesktopViewModel(
             startupTitle = startupManager.title,
             startupEnabledHint = startupManager.enabledDescription,
             startupUnavailableHint = startupManager.unavailableDescription,
+            displays = screenCapturer.displays.value,
+            selectedDisplayId = screenCapturer.selectedDisplayId.value,
+            streamFps = screenCapturer.framesPerSecond.value,
+            streamViewers = screenCapturer.viewerCount.value,
+            streamError = screenCapturer.captureError.value,
         )
 
         viewModelScope.launch {
@@ -66,6 +80,28 @@ class DesktopViewModel(
                         volumeLevel = serverStatus.volumeLevel,
                         isMuted = serverStatus.isMuted,
                         lastCommand = serverStatus.lastCommand,
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            combine(
+                screenCapturer.displays,
+                screenCapturer.selectedDisplayId,
+                screenCapturer.framesPerSecond,
+                screenCapturer.viewerCount,
+                screenCapturer.captureError,
+            ) { displays, selected, fps, viewers, error ->
+                ScreenShare(displays, selected, fps, viewers, error)
+            }.collect { share ->
+                uiState.update { current ->
+                    current.copy(
+                        displays = share.displays,
+                        selectedDisplayId = share.selectedDisplayId,
+                        streamFps = share.framesPerSecond,
+                        streamViewers = share.viewers,
+                        streamError = share.error,
                     )
                 }
             }
@@ -97,6 +133,10 @@ class DesktopViewModel(
         }
     }
 
+    fun selectDisplay(id: String) {
+        screenCapturer.selectDisplay(id)
+    }
+
     fun setLogLimit(limit: Int) {
         if (limit !in LOG_LIMITS) return
         uiState.update { it.copy(logLimit = limit) }
@@ -122,3 +162,11 @@ class DesktopViewModel(
         val LOG_LIMITS = setOf(1, 5, 10)
     }
 }
+
+private data class ScreenShare(
+    val displays: List<SharedDisplay>,
+    val selectedDisplayId: String,
+    val framesPerSecond: Int,
+    val viewers: Int,
+    val error: String?,
+)

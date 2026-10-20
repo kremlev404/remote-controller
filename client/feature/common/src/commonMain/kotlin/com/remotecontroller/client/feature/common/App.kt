@@ -14,6 +14,8 @@ import com.remotecontroller.client.feature.connect.api.ConnectEntry
 import com.remotecontroller.client.feature.connect.impl.ConnectScreen
 import com.remotecontroller.client.feature.remote.api.RemoteEntry
 import com.remotecontroller.client.feature.remote.impl.RemoteScreen
+import com.remotecontroller.client.feature.screen.api.ScreenEntry
+import com.remotecontroller.client.feature.screen.impl.ScreenScreen
 import com.remotecontroller.client.feature.settings.api.SettingsEntry
 import com.remotecontroller.client.feature.settings.impl.SettingsScreen
 import org.koin.compose.viewmodel.koinViewModel
@@ -21,6 +23,7 @@ import org.koin.compose.viewmodel.koinViewModel
 private val connectEntry = ConnectEntry()
 private val remoteEntry = RemoteEntry()
 private val settingsEntry = SettingsEntry()
+private val screenEntry = ScreenEntry()
 
 @Composable
 fun App(themeViewModel: AppThemeViewModel = koinViewModel()) {
@@ -62,6 +65,17 @@ private fun RemoteControllerNavHost() {
                     }
                 },
                 onOpenSettings = openSettings,
+                onOpenScreen = { navController.navigate(screenEntry.route) },
+            )
+        }
+        composable(route = screenEntry.route) {
+            ScreenScreen(
+                onBack = { navController.popBackStack() },
+                onDisconnected = {
+                    navController.navigate(connectEntry.route) {
+                        popUpTo(remoteEntry.route) { inclusive = true }
+                    }
+                },
             )
         }
         composable(route = settingsEntry.route) {

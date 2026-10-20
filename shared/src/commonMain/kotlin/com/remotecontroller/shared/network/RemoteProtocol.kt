@@ -6,6 +6,7 @@ import kotlinx.serialization.json.Json
 
 object RemoteProtocol {
     const val WS_PATH = "/ws"
+    const val STREAM_PATH = "/stream"
     const val INFO_PATH = "/info"
 }
 

@@ -2,6 +2,7 @@ package com.remotecontroller.desktop.di
 
 import com.remotecontroller.desktop.executor.CommandExecutor
 import com.remotecontroller.desktop.executor.MouseSimulator
+import com.remotecontroller.desktop.executor.ScreenCapturer
 import com.remotecontroller.desktop.executor.VolumeController
 import com.remotecontroller.desktop.platform.DesktopPlatform
 import com.remotecontroller.desktop.server.CommandServer
@@ -17,19 +18,20 @@ private val executorModule = module {
     single<VolumeController> { DesktopPlatform.volumeController() }
     single { DesktopPlatform.keyboardSimulator() }
     single { MouseSimulator() }
-    single { CommandExecutor(get(), get(), get()) }
+    single { ScreenCapturer() }
+    single { CommandExecutor(get(), get(), get(), get()) }
 }
 
 private val serverModule = module {
     single<IncomingFirewall> { DesktopPlatform.firewall() }
-    single { CommandServer(get(), get(), DesktopPlatform.machineName()) }
+    single { CommandServer(get(), get(), get(), DesktopPlatform.machineName()) }
     single<ServerKeepAlive> { DesktopPlatform.serverKeepAlive() }
     single { ServerLifecycle(get(), get()) }
     single<StartupManager> { DesktopPlatform.startupManager() }
 }
 
 private val presentationModule = module {
-    viewModel { DesktopViewModel(get(), get()) }
+    viewModel { DesktopViewModel(get(), get(), get()) }
 }
 
 val desktopAppModule = module {

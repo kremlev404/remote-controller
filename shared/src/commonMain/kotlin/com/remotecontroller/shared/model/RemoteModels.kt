@@ -72,6 +72,23 @@ sealed interface RemoteCommand {
     @Serializable
     @SerialName("hello")
     data class Hello(val name: String) : RemoteCommand
+
+    @Serializable
+    @SerialName("pointer")
+    data class Pointer(
+        val x: Float,
+        val y: Float,
+        val phase: String,
+        val button: String = "LEFT",
+    ) : RemoteCommand
+
+    @Serializable
+    @SerialName("pointer_scroll")
+    data class PointerScroll(
+        val x: Float,
+        val y: Float,
+        val deltaY: Int,
+    ) : RemoteCommand
 }
 
 fun RemoteCommand.describe(): String = when (this) {
@@ -85,6 +102,8 @@ fun RemoteCommand.describe(): String = when (this) {
     is RemoteCommand.MouseClick -> "Mouse ${button.lowercase()} click"
     is RemoteCommand.MouseScroll -> "Mouse scroll $deltaY"
     is RemoteCommand.Hello -> "Client connected"
+    is RemoteCommand.Pointer -> "Pointer ${phase.lowercase()} ${button.lowercase()}"
+    is RemoteCommand.PointerScroll -> "Pointer scroll $deltaY"
 }
 
 @Serializable
@@ -135,4 +154,8 @@ object RemoteKeys {
     val FUNCTION_KEYS = (1..12).map { "F$it" }
     val MOUSE_BUTTONS = listOf("LEFT", "RIGHT",)
     val MOUSE_BUTTONS_ADD = listOf( "ESC", "SPACE", "ENTER")
+
+    const val POINTER_DOWN = "down"
+    const val POINTER_MOVE = "move"
+    const val POINTER_UP = "up"
 }

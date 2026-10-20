@@ -8,6 +8,7 @@ class CommandExecutor(
     private val volumeController: VolumeController,
     private val keyboardSimulator: KeyboardSimulator,
     private val mouseSimulator: MouseSimulator,
+    private val screenCapturer: ScreenCapturer,
 ) {
 
     suspend fun execute(command: RemoteCommand): ServerStatus {
@@ -22,9 +23,32 @@ class CommandExecutor(
             is RemoteCommand.MouseClick -> mouseSimulator.click(command.button)
             is RemoteCommand.MouseScroll -> mouseSimulator.scroll(command.deltaY)
             is RemoteCommand.Hello -> Unit
+            is RemoteCommand.Pointer,
+            is RemoteCommand.PointerScroll,
+            -> applyPointer(command)
         }
 
         return currentStatus(lastCommand = command.describe())
+    }
+
+    fun applyPointer(command: RemoteCommand): Boolean = when (command) {
+        is RemoteCommand.Pointer -> {
+            screenCapturer.toScreen(command.x, command.y)?.let { point ->
+                mouseSimulator.pointer(point.x, point.y, command.phase, command.button)
+            }
+            true
+        }
+        is RemoteCommand.PointerScroll -> {
+            screenCapturer.toScreen(command.x, command.y)?.let { point ->
+                mouseSimulator.scrollAt(point.x, point.y, command.deltaY)
+            }
+            true
+        }
+        else -> false
+    }
+
+    fun releasePointer() {
+        mouseSimulator.releaseHeld()
     }
 
     suspend fun currentStatus(lastCommand: String? = null): ServerStatus {

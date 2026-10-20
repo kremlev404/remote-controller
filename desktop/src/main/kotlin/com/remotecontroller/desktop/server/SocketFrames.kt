@@ -39,6 +39,10 @@ internal object SocketFrames {
         write(endpoint, frame(0x1, text.toByteArray(Charsets.UTF_8)))
     }
 
+    suspend fun sendBinary(endpoint: String, payload: ByteArray) {
+        write(endpoint, frame(0x2, payload))
+    }
+
     suspend fun sendPong(endpoint: String, payload: ByteArray) {
         write(endpoint, frame(0xA, payload))
     }

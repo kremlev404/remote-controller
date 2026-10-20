@@ -2,6 +2,7 @@ package com.remotecontroller.desktop.server
 
 import com.remotecontroller.desktop.AppVersion
 import com.remotecontroller.desktop.executor.CommandExecutor
+import com.remotecontroller.desktop.executor.ScreenCapturer
 import com.remotecontroller.shared.model.RemoteCommand
 import com.remotecontroller.shared.model.RemoteKeys
 import com.remotecontroller.shared.model.ServerInfo
@@ -52,6 +53,7 @@ import kotlin.time.Duration.Companion.seconds
 
 class CommandServer(
     private val commandExecutor: CommandExecutor,
+    private val screenCapturer: ScreenCapturer,
     private val firewall: IncomingFirewall,
     private val machineName: String,
     private val port: Int = RemoteKeys.DEFAULT_PORT,
@@ -88,6 +90,8 @@ class CommandServer(
     suspend fun restart() {
         lifecycle.withLock {
             if (session.shutdown) return
+            screenCapturer.stopSharing()
+            commandExecutor.releasePointer()
             clearClientsLocked()
             session = session.copy(phase = KtorServerState.Restarting, lastError = null)
             publishRuntimeLocked()
@@ -110,6 +114,8 @@ class CommandServer(
 
     suspend fun stop() {
         lifecycle.withLock {
+            screenCapturer.stopSharing()
+            commandExecutor.releasePointer()
             session = session.copy(
                 shutdown = true,
                 probeFailures = 0,
@@ -307,6 +313,26 @@ class CommandServer(
                         publishVolumeStatus()
                     }
                 }
+
+                webSocketRaw(RemoteProtocol.STREAM_PATH) {
+                    val point = call.request.local
+                    val remote = point.remoteAddress.ifBlank { "screen" }
+                    val endpoint = SocketFrames.endpoint(remote, point.remotePort)
+                    screenCapturer.watch(endpoint)
+                    log("screen stream opened ($remote)")
+                    try {
+                        for (frame in incoming) {
+                            when (frame) {
+                                is Frame.Ping -> runCatching { SocketFrames.sendPong(endpoint, frame.data) }
+                                is Frame.Close -> break
+                                else -> Unit
+                            }
+                        }
+                    } finally {
+                        screenCapturer.unwatch(endpoint)
+                        log("screen stream closed ($remote)")
+                    }
+                }
             }
         }
     }
@@ -414,6 +440,8 @@ class CommandServer(
             return
         }
 
+        if (commandExecutor.applyPointer(command)) return
+
         val newStatus = commandExecutor.execute(command).copy(connectedClients = clientCount())
         volumeSnapshot = VolumeSnapshot(newStatus.volumeLevel, newStatus.isMuted)
         status.value = newStatus
@@ -436,8 +464,12 @@ class CommandServer(
     }
 
     private fun unregisterClient(slot: ClientSlot) {
-        synchronized(clients) { clients.remove(slot) }
+        val remaining = synchronized(clients) {
+            clients.remove(slot)
+            clients.size
+        }
         publishClients()
+        if (remaining == 0) commandExecutor.releasePointer()
     }
 
     suspend fun disconnectClient(id: Long) {

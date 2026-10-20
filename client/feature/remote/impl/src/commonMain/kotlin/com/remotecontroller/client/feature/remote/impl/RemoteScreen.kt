@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LinkOff
@@ -66,6 +67,7 @@ private enum class RemotePage(val label: String) {
 fun RemoteScreen(
     onDisconnected: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenScreen: () -> Unit,
     viewModel: RemoteViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -99,6 +101,7 @@ fun RemoteScreen(
                 isWifiConnected = uiState.networkStatus.isWifi,
                 serverHint = uiState.serverHint,
                 serverEndpoint = uiState.serverEndpoint,
+                onOpenScreen = onOpenScreen,
                 onOpenSettings = onOpenSettings,
                 onDisconnect = { viewModel.disconnect(onDisconnected) },
             )
@@ -147,6 +150,7 @@ private fun Header(
     isWifiConnected: Boolean,
     serverHint: String,
     serverEndpoint: String?,
+    onOpenScreen: () -> Unit,
     onOpenSettings: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
@@ -162,6 +166,11 @@ private fun Header(
             serverEndpoint = serverEndpoint,
             compact = true,
             modifier = Modifier.weight(1f),
+        )
+        RoundIconButton(
+            icon = Icons.Default.DesktopWindows,
+            contentDescription = "Screen",
+            onClick = onOpenScreen,
         )
         RoundIconButton(
             icon = Icons.Default.Settings,

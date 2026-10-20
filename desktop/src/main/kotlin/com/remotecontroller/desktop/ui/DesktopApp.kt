@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.Refresh
@@ -53,6 +55,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.remotecontroller.desktop.executor.SharedDisplay
 import com.remotecontroller.desktop.server.ConnectedClient
 import com.remotecontroller.desktop.AppVersion
 import com.remotecontroller.desktop.server.ServerLogLine
@@ -87,6 +90,15 @@ fun DesktopApp(viewModel: DesktopViewModel = koinViewModel()) {
                     addresses = uiState.server.addresses,
                     recommendedAddress = uiState.server.recommendedAddress,
                     port = uiState.server.port,
+                )
+
+                DisplayCard(
+                    displays = uiState.displays,
+                    selectedDisplayId = uiState.selectedDisplayId,
+                    framesPerSecond = uiState.streamFps,
+                    viewers = uiState.streamViewers,
+                    errorMessage = uiState.streamError,
+                    onSelect = viewModel::selectDisplay,
                 )
 
                 LastCommandCard(uiState.lastCommand)
@@ -515,6 +527,77 @@ private fun ConnectionCard(
                     text = "Phone and PC must be on the same Wi-Fi network",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DisplayCard(
+    displays: List<SharedDisplay>,
+    selectedDisplayId: String,
+    framesPerSecond: Int,
+    viewers: Int,
+    errorMessage: String?,
+    onSelect: (String) -> Unit,
+) {
+    val status = when {
+        viewers <= 0 -> "Open Screen on the phone to watch this display."
+        framesPerSecond <= 0 -> "Starting the picture…"
+        viewers == 1 -> "$framesPerSecond fps · 1 phone"
+        else -> "$framesPerSecond fps · $viewers phones"
+    }
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DesktopWindows,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = "Screen",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Text(
+                text = status,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (displays.isEmpty()) {
+                Text(
+                    text = "No display found.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    displays.forEach { display ->
+                        FilterChip(
+                            selected = display.id == selectedDisplayId,
+                            onClick = { onSelect(display.id) },
+                            label = { Text(display.label) },
+                        )
+                    }
+                }
+            }
+            if (errorMessage != null) {
+                Text(
+                    text = errorMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
                 )
             }
         }
