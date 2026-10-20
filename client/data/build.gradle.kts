@@ -15,8 +15,6 @@ kotlin {
             implementation(libs.ktor.client.websockets)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)
-            implementation(libs.androidx.datastore.core)
-            implementation(libs.androidx.datastore.preferences.core)
         }
         androidMain.dependencies {
             implementation(libs.koin.android)

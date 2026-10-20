@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.remotecontroller.client.domain.usecase.DisconnectFromPcUseCase
 import com.remotecontroller.client.domain.usecase.ObserveActiveConnectionUseCase
 import com.remotecontroller.client.domain.usecase.ObserveConnectionStateUseCase
+import com.remotecontroller.client.domain.model.PointerSensitivity
 import com.remotecontroller.client.domain.usecase.ObserveNetworkStatusUseCase
+import com.remotecontroller.client.domain.usecase.ObservePointerDpiUseCase
 import com.remotecontroller.client.domain.usecase.ObserveServerStatusUseCase
 import com.remotecontroller.client.domain.usecase.RetryConnectionUseCase
 import com.remotecontroller.client.domain.usecase.SendKeyCommandUseCase
@@ -44,6 +46,7 @@ class RemoteViewModel(
     observeServerStatusUseCase: ObserveServerStatusUseCase,
     observeActiveConnectionUseCase: ObserveActiveConnectionUseCase,
     observeNetworkStatusUseCase: ObserveNetworkStatusUseCase,
+    observePointerDpiUseCase: ObservePointerDpiUseCase,
 ) : ViewModel() {
 
     private val localState = MutableStateFlow(RemoteLocalState())
@@ -51,21 +54,27 @@ class RemoteViewModel(
     private val pendingVolume = MutableSharedFlow<Int>(extraBufferCapacity = 1)
 
     val uiState: StateFlow<RemoteScreenUiState> = combine(
-        observeConnectionStateUseCase(),
-        observeServerStatusUseCase(),
-        observeActiveConnectionUseCase(),
-        observeNetworkStatusUseCase(),
-        localState,
-    ) { connection, serverStatus, activeConnection, networkStatus, local ->
-        RemoteScreenUiState(
-            connectionState = connection,
-            networkStatus = networkStatus,
-            pcHost = activeConnection?.host?.value,
-            volumeLevel = serverStatus?.volumeLevel ?: local.volumeLevel,
-            isMuted = serverStatus?.isMuted ?: local.isMuted,
-            isSending = local.isSending,
-            errorMessage = local.errorMessage,
-        )
+        combine(
+            observeConnectionStateUseCase(),
+            observeServerStatusUseCase(),
+            observeActiveConnectionUseCase(),
+            observeNetworkStatusUseCase(),
+            localState,
+        ) { connection, serverStatus, activeConnection, networkStatus, local ->
+            RemoteScreenUiState(
+                connectionState = connection,
+                networkStatus = networkStatus,
+                serverHint = activeConnection?.hint.orEmpty(),
+                serverEndpoint = activeConnection?.let { "${it.host.value}:${it.port.value}" },
+                volumeLevel = serverStatus?.volumeLevel ?: local.volumeLevel,
+                isMuted = serverStatus?.isMuted ?: local.isMuted,
+                isSending = local.isSending,
+                errorMessage = local.errorMessage,
+            )
+        },
+        observePointerDpiUseCase(),
+    ) { state, dpi ->
+        state.copy(pointerScale = PointerSensitivity.scale(dpi))
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),

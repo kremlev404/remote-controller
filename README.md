@@ -82,10 +82,12 @@ The iOS app is the `iosApp` Xcode project. It builds the `ClientUI` framework fr
 | `:android`, `iosApp` | Phone apps |
 | `:client:feature:connect` | Connect screen. `api` is the route, `impl` is the screen |
 | `:client:feature:remote` | Remote screen, same split |
+| `:client:feature:settings` | Settings screen, same split. Appearance, including theme |
 | `:client:feature:umbrella` | Holds the screen implementations and their dependencies |
 | `:client:feature:common` | Shared phone shell: theme, navigation, app graph |
 | `:client:core` | Route contract the screens share |
 | `:client:domain`, `:client:data` | Use cases, and the socket that reaches the laptop |
+| `:client:storage` | Saved servers and preferences |
 | `:shared` | Messages both sides understand |
 | `build-logic` | Shared Gradle setup |
 

@@ -15,6 +15,9 @@ activity-compose = "1.13.0"
 navigation = "2.10.2"
 navigation-kmp = "2.10.0-rc01"
 datastore = "1.2.1"
+room3 = "3.0.2"
+sqlite = "2.6.2"
+ksp = "2.3.12"
 core-ktx = "1.19.1"
 jna = "5.19.1"
 slf4j = "2.0.20"
@@ -65,6 +68,9 @@ jetbrains-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecyc
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 androidx-datastore-core = { module = "androidx.datastore:datastore-core", version.ref = "datastore" }
 androidx-datastore-preferences-core = { module = "androidx.datastore:datastore-preferences-core", version.ref = "datastore" }
+androidx-room3-runtime = { module = "androidx.room3:room3-runtime", version.ref = "room3" }
+androidx-room3-compiler = { module = "androidx.room3:room3-compiler", version.ref = "room3" }
+androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "sqlite" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
@@ -82,6 +88,8 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+androidx-room3 = { id = "androidx.room3", version.ref = "room3" }
 remotecontroller-kmp-library = { id = "remotecontroller.kmp.library" }
 remotecontroller-kmp-compose = { id = "remotecontroller.kmp.compose" }
 remotecontroller-kmp-feature-api = { id = "remotecontroller.kmp.feature.api" }

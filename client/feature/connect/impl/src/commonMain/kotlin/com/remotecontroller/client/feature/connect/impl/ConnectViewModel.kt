@@ -26,6 +26,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 private data class ConnectFormState(
+    val hint: String = "",
     val host: String = "",
     val port: String = ServerPort.DEFAULT.value.toString(),
     val isLoading: Boolean = false,
@@ -58,6 +59,7 @@ class ConnectViewModel(
         observeSavedServersUseCase(),
     ) { form, connection, savedServers ->
         ConnectUiState(
+            hint = form.hint,
             host = form.host,
             port = form.port,
             savedServers = savedServers,
@@ -78,6 +80,7 @@ class ConnectViewModel(
             val saved = observeSavedConnectionUseCase().first() ?: return@launch
             formState.update {
                 it.copy(
+                    hint = saved.hint,
                     host = saved.host,
                     port = saved.portText,
                     savedDefaultsApplied = true,
@@ -98,6 +101,10 @@ class ConnectViewModel(
         if (granted) launchStartupConnect()
     }
 
+    fun onHintChange(hint: String) {
+        formState.update { it.copy(hint = hint, errorMessage = null, savedDefaultsApplied = true) }
+    }
+
     fun onHostChange(host: String) {
         formState.update { it.copy(host = host, errorMessage = null, savedDefaultsApplied = true) }
     }
@@ -115,6 +122,7 @@ class ConnectViewModel(
     fun selectSavedServer(server: SavedConnection) {
         formState.update {
             it.copy(
+                hint = server.hint,
                 host = server.host,
                 port = server.portText,
                 errorMessage = null,
@@ -135,7 +143,7 @@ class ConnectViewModel(
         val form = formState.value
         val port = form.port.toIntOrNull() ?: ServerPort.DEFAULT.value
         formState.update { it.copy(pendingStartupNavigation = false) }
-        viewModelScope.launch { performConnect(form.host, port) }
+        viewModelScope.launch { performConnect(form.hint, form.host, port) }
     }
 
     private fun launchStartupConnect() {
@@ -152,21 +160,22 @@ class ConnectViewModel(
             AppSession.startupAutoConnectDone = true
             formState.update {
                 it.copy(
+                    hint = saved.hint,
                     host = saved.host,
                     port = saved.portText,
                     pendingStartupNavigation = true,
                     savedDefaultsApplied = true,
                 )
             }
-            performConnect(saved.host, saved.port)
+            performConnect(saved.hint, saved.host, saved.port)
         }
     }
 
-    private suspend fun performConnect(host: String, port: Int) {
+    private suspend fun performConnect(hint: String, host: String, port: Int) {
         formState.update { it.copy(isLoading = true, errorMessage = null) }
         try {
-            connectToPcUseCase(host, port)
-                .onSuccess { saveConnectionUseCase(host, port) }
+            connectToPcUseCase(host, port, hint)
+                .onSuccess { saveConnectionUseCase(host, port, hint) }
                 .onFailure { error ->
                     if (error is CancellationException) return@onFailure
                     formState.update { it.copy(errorMessage = error.describeForUi()) }

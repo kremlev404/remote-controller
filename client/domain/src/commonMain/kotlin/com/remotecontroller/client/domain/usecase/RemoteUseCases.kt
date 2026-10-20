@@ -12,11 +12,12 @@ import kotlinx.coroutines.flow.StateFlow
 class ConnectToPcUseCase(
     private val repository: RemoteRepository,
 ) {
-    suspend operator fun invoke(host: String, port: Int): Result<Unit> = runCatching {
+    suspend operator fun invoke(host: String, port: Int, hint: String): Result<Unit> = runCatching {
         repository.connect(
             PcConnection(
                 host = PcHost(host.trim()),
                 port = ServerPort(port),
+                hint = hint.trim(),
             ),
         ).getOrThrow()
     }

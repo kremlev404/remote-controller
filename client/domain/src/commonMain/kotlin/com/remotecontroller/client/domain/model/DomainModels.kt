@@ -6,6 +6,7 @@ import com.remotecontroller.shared.model.ServerPort
 data class PcConnection(
     val host: PcHost,
     val port: ServerPort,
+    val hint: String = "",
     val pcName: String? = null,
 )
 

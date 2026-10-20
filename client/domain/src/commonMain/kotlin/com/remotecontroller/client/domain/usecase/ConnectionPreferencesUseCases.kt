@@ -19,7 +19,7 @@ class ObserveSavedServersUseCase(
 class SaveConnectionUseCase(
     private val repository: ConnectionPreferencesRepository,
 ) {
-    suspend operator fun invoke(host: String, port: Int) {
-        SavedConnection.from(host, port)?.let { repository.saveConnection(it) }
+    suspend operator fun invoke(host: String, port: Int, hint: String) {
+        SavedConnection.from(host, port, hint)?.let { repository.saveConnection(it) }
     }
 }

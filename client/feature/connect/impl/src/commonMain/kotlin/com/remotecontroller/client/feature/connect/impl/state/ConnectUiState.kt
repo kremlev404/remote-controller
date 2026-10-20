@@ -7,6 +7,7 @@ import com.remotecontroller.shared.model.ServerPort
 
 @Immutable
 data class ConnectUiState(
+    val hint: String = "",
     val host: String = "",
     val port: String = ServerPort.DEFAULT.value.toString(),
     val savedServers: List<SavedConnection> = emptyList(),
