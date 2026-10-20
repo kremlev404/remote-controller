@@ -1,161 +1,92 @@
 # Remote Controller
 
-Control your Windows PC from your Android phone over local Wi-Fi — adjust volume, send media keys, and simulate keyboard input.
+**The laptop is the TV. The phone is the remote.**
 
-## Stack (latest)
+You already have a laptop plugged into the television with an HDMI cable. The picture is on the screen. You are on the couch, and the laptop is two to ten meters away. Standing up to skip an ad, lower the volume, or start the next episode is the whole problem.
 
-| Component | Version |
-|-----------|---------|
-| Gradle | 9.6.1 |
-| Android Gradle Plugin | 9.2.1 |
-| Kotlin | 2.4.0 |
-| Compose Multiplatform (desktop + client) | 1.12.1 |
-| Compose BOM (Android) | 2026.06.00 |
-| Ktor | 3.5.0 |
-| Koin | 4.2.2 |
+Remote Controller is that remote. It is free now, and it stays free.
 
-## Project structure
+![From the couch: volume, playback, and a mouse pad on the phone. The laptop shows the address and sends the picture to the TV over HDMI.](docs/couch-to-tv.jpg)
 
-```
-remote-controller/
-├── shared/          # Wire protocol (KMP: Android, iOS, JVM for the desktop server)
-├── client/
-│   ├── domain/      # Models, repository contracts, use cases
-│   ├── data/        # Repositories, Ktor client, DataStore; Android actuals + iOS TODOs
-│   └── ui/          # Compose Multiplatform screens, ViewModels, navigation
-├── android/         # Android application shell (Activity, manifest)
-├── iosApp/          # Xcode shell that hosts the Compose UI
-└── desktop/         # Windows PC server (Compose Desktop + Ktor + Koin)
-```
+## Stay seated
 
-## Features
+The phone does not stream the movie. The laptop does. The phone only reaches across the room and presses what you would have pressed.
 
-**Android app (controller)**
-- Connect to PC via IP address on local Wi-Fi
-- Volume slider, up/down, mute
-- Media keys (play/pause, next, previous, stop)
-- Navigation and function keys
+| From the couch | On the laptop |
+|---|---|
+| Volume, including mute | The system volume |
+| Play, pause, next, previous | The media keys your player already understands |
+| Move, click, scroll | The pointer. That is how you hit **Skip** and **Next episode** |
+| Arrows, Enter, Escape, function keys | A keyboard, when the player wants one |
 
-**Windows desktop app (server)**
-- Shows local IP addresses for pairing
-- WebSocket server receives commands from Android
-- Executes volume changes and keyboard simulation via `java.awt.Robot`
+The address you type the first time is saved. Next evening you open the phone and you are back.
 
-## Requirements
+## Three things in the room
 
-- JDK 21
-- Android Studio (for the Android app)
-- A Mac with Xcode to compile the iOS app (the iOS target is in the project; Kotlin/Native builds it only on macOS)
-- Windows PC and phone on the same Wi-Fi network
+1. **The TV** only receives HDMI. It does not need apps, an account, or a smart-TV remote.
+2. **The laptop** runs this app and shows an address, for example `192.168.1.20:8765`. Leave it running. It can start when the laptop starts.
+3. **The phone** joins the same Wi-Fi, uses that address, and stays in your hand.
 
-## Run the PC server
+Nothing else is required. There is no account to create and no service of ours in the middle. The phone talks to the laptop. The laptop talks to the TV through the cable you already own.
+
+## Free, and staying that way
+
+This is a remote control for a computer on your own network. There is no subscription to lapse, no viewing history to collect, and no cloud account that would make a paid tier possible later. If the laptop and the phone can see each other on Wi-Fi, it works. That is the whole product, and it remains free.
+
+## Download the laptop app
+
+macOS and Windows builds are published by GitLab CI.
+
+- Push a version tag. The pipeline builds the installer on a Mac and on a Windows machine, and GitLab turns that tag into a Release with both downloads.
+- You can also download `artifacts/desktop` from the `macos` or `windows` job on that pipeline before the Release is created.
+
+Each build contains the installer and a portable copy of the app. The phone apps for Android and iOS are in this repository. They are not in the stores yet.
+
+The Mac that builds the macOS app needs a runner tagged `macos`, with a full JDK that includes `jpackage` and with CMake. The Windows machine needs a runner tagged `windows` and a JDK with `jpackage`. Android Studio's bundled runtime is not enough. Point the runner at a normal JDK with `JAVA_HOME` or `DESKTOP_JDK_HOME`.
+
+## Use it
+
+1. Plug the laptop into the TV with HDMI and set the TV to that input.
+2. Open the laptop app. Read the address on the screen.
+3. On the phone, connect to that address. Same Wi-Fi, not mobile data.
+4. Sit down. Volume, next, and a click on the screen are in your hand.
+
+A guest Wi-Fi that hides devices from each other will not connect. Use the network where the laptop and the phone can see each other.
+
+## What it will not do
+
+It will not turn the television into a smart TV, and it will not install anything on the TV. It will not remove ads from a stream. It gives you the click and the keys, so the Skip button and the next-episode button are reachable without crossing the room.
+
+## Build from source
+
+Laptop app, from the repository root:
 
 ```bash
 ./gradlew :desktop:run
-```
-
-The server window shows your PC's IP address and listens on port **8765**.
-
-## Run the Android app
-
-Open the project in Android Studio and run the `:android` module on a device or emulator.
-
-1. Start the PC server first
-2. Enter the IP shown on the PC app (e.g. `192.168.1.100`)
-3. Tap **Connect**
-
-## Run the iOS app
-
-On a Mac, open `iosApp/iosApp.xcodeproj`, set your team in `iosApp/Configuration/Config.xcconfig`, and run the `iosApp` target. The Xcode build calls `:client:ui:embedAndSignAppleFrameworkForXcode` and shows the shared Compose UI.
-
-iOS platform code is still `TODO()`: network monitor, Ktor Darwin client, DataStore path, local-network permission, and logging. The screen is shared; those actuals are the next implementation step.
-
-## Version
-
-`version.properties` at the repository root is the product name and version:
-
-```
-name=Remote Controller Server
-version=1.0.0
-versionCode=1
-```
-
-Gradle reads that file for the desktop package name, package version, artifact file names, the version reported by the running server, and the Android `versionName` / `versionCode`. `version` must be numeric (`1.2.0`) because the desktop installer is built with jpackage.
-
-## Build desktop artifacts
-
-One command builds every desktop artifact for the machine you are on and copies them to `artifacts/desktop`:
-
-```bash
 ./gradlew packageDesktop
 ```
 
-| Host | Artifacts |
-|------|-----------|
-| Windows | `artifacts/desktop/Remote Controller Server-1.0.0.exe` and the portable app in `artifacts/desktop/Remote Controller Server-1.0.0/` |
-| macOS | `artifacts/desktop/Remote Controller Server-1.0.0.dmg` and the portable `.app` in `artifacts/desktop/Remote Controller Server-1.0.0/` |
+`packageDesktop` writes the installer and a portable app into `artifacts/desktop`. On macOS the volume control is a small native library built with CMake during that build.
 
-The folder name follows `name` and `version` from `version.properties`. Packaging needs a full JDK 21 that includes `jpackage` (not the Android Studio JBR). Point Gradle at it with `desktop.jdk.home` in `local.properties` or `JAVA_HOME`.
+Phone:
 
 ```bash
-# Android APK, versioned from the same file
 ./gradlew :android:assembleDebug
 ```
 
-## Architecture (client)
+The iOS app is the `iosApp` Xcode project. It builds the `ClientUI` framework from `:client:feature:common`.
 
-Shared across Android and iOS:
+| Module | What it is |
+|---|---|
+| `:desktop` | Laptop app. The window, the address, volume, keyboard, and mouse |
+| `:android`, `iosApp` | Phone apps |
+| `:client:feature:connect` | Connect screen. `api` is the route, `impl` is the screen |
+| `:client:feature:remote` | Remote screen, same split |
+| `:client:feature:umbrella` | Holds the screen implementations and their dependencies |
+| `:client:feature:common` | Shared phone shell: theme, navigation, app graph |
+| `:client:core` | Route contract the screens share |
+| `:client:domain`, `:client:data` | Use cases, and the socket that reaches the laptop |
+| `:shared` | Messages both sides understand |
+| `build-logic` | Shared Gradle setup |
 
-```
-:client:ui       →  Compose screens, ViewModels, type-safe navigation, Koin graph
-:client:domain   →  Use cases, repository interfaces, domain models
-:client:data     →  Repository implementations, Ktor session, DataStore store
-:shared          →  Protocol models used by the client and the desktop server
-```
-
-Platform code lives in `androidMain` / `iosMain` of `:client:data` and `:client:ui`:
-
-- Android: Wi-Fi `NetworkMonitor`, OkHttp engine bound to the LAN, DataStore file, local-network permission prompt
-- iOS: the same `actual` declarations, currently `TODO()`
-
-`:android` and `iosApp` only start the process and show `App()`.
-
-### Desktop DI (Koin)
-
-```
-executor/      →  VolumeController, KeyboardSimulator, CommandExecutor
-server/        →  CommandServer (Ktor WebSocket)
-presentation/  →  DesktopViewModel, Compose UI
-di/            →  Koin modules (executor, server, presentation)
-```
-
-### Modern Kotlin patterns used
-
-- **Sealed interfaces** — `RemoteCommand`, `ServerMessage`, `ConnectionState` with exhaustive `when`
-- **Value classes** — `PcHost`, `ServerPort`, `VolumePercent` for type-safe domain values
-- **Data objects** — `RemoteCommand.MuteToggle`, navigation `ConnectRoute` / `RemoteRoute`
-- **Type-safe navigation** — `@Serializable` routes with Navigation Compose 2.9+
-- **Explicit backing fields (Kotlin 2.4)** — replaces `_state`/`state.asStateFlow()` with a single property:
-
-```kotlin
-val status: StateFlow<ServerStatus>
-    field = MutableStateFlow(initialStatus())
-
-// inside class: status.value = ... (MutableStateFlow)
-// outside class: read-only StateFlow
-```
-
-- **Flow `combine` + `stateIn`** — ViewModels derive UI state from multiple sources
-- **`@Immutable` UI state** — Compose stability for recomposition
-- **`kotlin.time`** — debounced volume slider (250ms) via `Flow.debounce`
-- **Shared `RemoteJson`** — single `Json` config with `inline reified` encode/decode
-- **Use case `operator invoke`** — callable use cases (`ConnectToPcUseCase()`, `SendRemoteCommandUseCase()`)
-
-## Protocol
-
-Commands are sent as JSON over WebSocket (`ws://<ip>:8765/ws`). Each command is a sealed `RemoteCommand` subtype:
-
-- `SetVolume`, `VolumeUp`, `VolumeDown`, `MuteToggle`
-- `KeyPress`, `KeyCombo`
-
-Server info endpoint: `http://<ip>:8765/info`
+Gradle conventions live in `build-logic` (`remotecontroller.kmp.library`, `remotecontroller.kmp.compose`, `remotecontroller.kmp.feature.api`, `remotecontroller.kmp.feature.impl`, `remotecontroller.android.application`). Product name and version for installers live in `version.properties`.

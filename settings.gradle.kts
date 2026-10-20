@@ -1,4 +1,5 @@
 pluginManagement {
+    includeBuild("build-logic")
     repositories {
         google {
             content {
@@ -23,8 +24,14 @@ dependencyResolutionManagement {
 rootProject.name = "remote-controller"
 
 include(":shared")
+include(":client:core")
 include(":client:domain")
 include(":client:data")
-include(":client:ui")
+include(":client:feature:connect:api")
+include(":client:feature:connect:impl")
+include(":client:feature:remote:api")
+include(":client:feature:remote:impl")
+include(":client:feature:umbrella")
+include(":client:feature:common")
 include(":android")
 include(":desktop")

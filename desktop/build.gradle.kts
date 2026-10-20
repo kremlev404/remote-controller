@@ -1,6 +1,18 @@
+import javax.inject.Inject
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.JavaExec
+import org.gradle.api.tasks.Optional
+import org.gradle.api.tasks.OutputFile
+import org.gradle.api.tasks.TaskAction
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.toolchain.JavaToolchainService
+import org.gradle.process.ExecOperations
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import java.io.File
 import java.util.Properties
@@ -267,37 +279,79 @@ kotlin.sourceSets.named("main").configure {
     kotlin.srcDir(layout.buildDirectory.dir("generated/appVersion/kotlin"))
 }
 
-val compileMacVolume = tasks.register<Exec>("compileMacVolume") {
-    group = "build"
-    description = "Compile the macOS Core Audio volume library"
-    onlyIf { desktopIsMac }
-    val source = layout.projectDirectory.file("src/main/cpp/MacVolume.cpp")
-    val output = layout.buildDirectory.file("natives/libmacvolume.dylib")
-    inputs.file(source)
-    outputs.file(output)
-    val jniJdkHome = discoverJniJdkHome()
-    doFirst {
-        output.get().asFile.parentFile.mkdirs()
-        val home = jniJdkHome ?: throw GradleException(
+abstract class CompileMacVolumeTask : DefaultTask() {
+    @get:InputDirectory
+    abstract val sourceDir: DirectoryProperty
+
+    @get:Internal
+    abstract val cmakeBuildDir: DirectoryProperty
+
+    @get:OutputFile
+    abstract val outputLibrary: RegularFileProperty
+
+    @get:Input
+    @get:Optional
+    abstract val jniJdkHome: Property<String>
+
+    @get:Inject
+    abstract val execOperations: ExecOperations
+
+    @TaskAction
+    fun compile() {
+        val home = jniJdkHome.orNull?.takeIf { it.isNotBlank() } ?: throw GradleException(
             """
             Compiling Mac volume needs jni.h from a full JDK.
             Gradle is running on ${System.getProperty("java.home")}, which has no include/jni.h.
             Install Temurin 21, or set JAVA_HOME / desktop.jdk.home to a JDK that contains include/jni.h.
             """.trimIndent(),
         )
-        val include = File(home, "include")
-        logger.lifecycle("Mac volume JNI headers: $include")
-        commandLine(
-            "clang++",
-            "-std=c++17",
-            "-dynamiclib",
-            "-framework", "CoreAudio",
-            "-I", include.absolutePath,
-            "-I", File(include, "darwin").absolutePath,
-            "-o", output.get().asFile.absolutePath,
-            source.asFile.absolutePath,
+        val cmake = cmakeExecutable()
+        val buildDir = cmakeBuildDir.get().asFile
+        val outputDir = outputLibrary.get().asFile.parentFile
+        outputDir.mkdirs()
+        logger.lifecycle("Mac volume JNI headers: ${File(home, "include")}")
+        execOperations.exec {
+            commandLine(
+                cmake,
+                "-S", sourceDir.get().asFile.absolutePath,
+                "-B", buildDir.absolutePath,
+                "-DCMAKE_BUILD_TYPE=Release",
+                "-DJAVA_HOME=$home",
+                "-DMACVOLUME_OUTPUT_DIR=${outputDir.absolutePath}",
+            )
+        }
+        execOperations.exec {
+            commandLine(cmake, "--build", buildDir.absolutePath, "--config", "Release")
+        }
+    }
+
+    private fun cmakeExecutable(): String {
+        val override = System.getenv("CMAKE")?.trim()?.takeIf { it.isNotEmpty() }
+        if (override != null) {
+            if (!File(override).canExecute()) {
+                throw GradleException("CMAKE is set to $override, but that file is not executable.")
+            }
+            return override
+        }
+        val exe = if (System.getProperty("os.name").lowercase().contains("win")) "cmake.exe" else "cmake"
+        val found = System.getenv("PATH").orEmpty()
+            .split(File.pathSeparator)
+            .map { File(it, exe) }
+            .firstOrNull { it.canExecute() }
+        return found?.absolutePath ?: throw GradleException(
+            "CMake is required to build libmacvolume. Install CMake and ensure `cmake` is on PATH.",
         )
     }
+}
+
+val compileMacVolume = tasks.register<CompileMacVolumeTask>("compileMacVolume") {
+    group = "build"
+    description = "Build the macOS Core Audio volume library with CMake"
+    onlyIf { desktopIsMac }
+    sourceDir.set(layout.projectDirectory.dir("src/main/cpp"))
+    cmakeBuildDir.set(layout.buildDirectory.dir("cmake"))
+    outputLibrary.set(layout.buildDirectory.file("natives/libmacvolume.dylib"))
+    discoverJniJdkHome()?.let { jniJdkHome.set(it) }
 }
 
 tasks.named<ProcessResources>("processResources") {
