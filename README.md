@@ -35,7 +35,7 @@ Android `minSdk` 26, `compileSdk` / `targetSdk` 37. Versions live in `gradle/lib
 
 iOS Kotlin targets are `iosArm64` and `iosSimulatorArm64`.
 
-`:desktop` input and volume: Windows via JNA, macOS volume via `libmacvolume.dylib` (Core Audio, built with `clang++` during the Gradle build).
+`:desktop` input and volume: Windows via JNA, macOS volume via `libmacvolume.dylib` (Core Audio). Gradle builds that library with CMake (`:desktop:compileMacVolume`).
 
 `version.properties` sets the product name, `version`, and `versionCode`. Gradle uses it for the desktop package name, artifact file names, the version the server reports, and Android `versionName` / `versionCode`. `version` must be numeric (`1.2.0`) because the installer is built with `jpackage`.
 
@@ -60,7 +60,7 @@ Packaged app, copied to `artifacts/desktop`:
 | Windows | `Remote Controller Server-1.0.0.exe` and a portable folder |
 | macOS | `Remote Controller Server-1.0.0.dmg` and a portable `.app` |
 
-Names follow `version.properties`. Packaging needs a full JDK 21 with `jpackage` (Android Studio JBR does not have it). On macOS the volume library also needs `jni.h`. Point Gradle at that JDK with `desktop.jdk.home` in `local.properties` or `JAVA_HOME`.
+Names follow `version.properties`. Packaging needs a full JDK 21 with `jpackage` (Android Studio JBR does not have it). On macOS the volume library also needs CMake and `jni.h`. Point Gradle at that JDK with `desktop.jdk.home` in `local.properties` or `JAVA_HOME`.
 
 **Android**
 
