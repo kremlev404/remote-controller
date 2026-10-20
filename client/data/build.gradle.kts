@@ -1,21 +1,9 @@
 plugins {
-    alias(libs.plugins.kotlin.multiplatform)
-    alias(libs.plugins.android.kmp.library)
+    alias(libs.plugins.remotecontroller.kmp.library)
     alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {
-    jvmToolchain(21)
-
-    android {
-        namespace = "com.remotecontroller.client.data"
-        compileSdk = 37
-        minSdk = 26
-    }
-
-    iosArm64()
-    iosSimulatorArm64()
-
     sourceSets {
         commonMain.dependencies {
             implementation(project(":shared"))
