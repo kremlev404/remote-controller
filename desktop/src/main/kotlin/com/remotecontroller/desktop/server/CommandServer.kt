@@ -96,6 +96,7 @@ class CommandServer(
 
     private val grants = LinkGrants()
 
+    val rememberedDevices: StateFlow<List<String>> = grants.names
     private val gate = LinkGate(pairingCode, settings, approvals, grants) { message -> log(message) }
 
     private val localTls = LocalTls.open()
@@ -119,6 +120,12 @@ class CommandServer(
         approvals.denyAll()
         SecureFrames.approvedEndpoints().forEach(SocketFrames::close)
         log("access code required again; approved devices were disconnected")
+    }
+
+    fun forgetDevices() {
+        grants.revokeAll()
+        SecureFrames.approvedEndpoints().forEach(SocketFrames::close)
+        log("every remembered device was forgotten")
     }
 
     /** A socket the relay opened for a peer outside the LAN. [channel] is the path it asked for. */
@@ -385,7 +392,7 @@ class CommandServer(
             link = link,
             gate = gate,
             clipboard = clipboard,
-            onPointer = commandExecutor::applyPointer,
+            onInput = { command -> commandExecutor.applyPointer(command) || commandExecutor.applyTyping(command) },
             onBrowserListed = ::listBrowser,
             onBrowserGone = ::forgetBrowser,
             log = { message -> log(message) },
@@ -603,6 +610,7 @@ class CommandServer(
         is RemoteCommand.MouseScroll,
         is RemoteCommand.KeyPress,
         is RemoteCommand.TypeText,
+        is RemoteCommand.KeyState,
         -> true
         else -> false
     }
@@ -663,6 +671,7 @@ class CommandServer(
     }
 
     private fun forgetBrowser(endpoint: String) {
+        commandExecutor.releaseKeys()
         val removed = synchronized(clients) { browsers.removeAll { it.endpoint == endpoint } }
         if (!removed) return
         publishClients()

@@ -3,6 +3,7 @@ package com.remotecontroller.client.data.repository
 import com.remotecontroller.client.domain.model.PcConnection
 import com.remotecontroller.client.domain.repository.ClipSnapshot
 import com.remotecontroller.client.domain.repository.ClipboardRepository
+import com.remotecontroller.client.domain.repository.DeviceGrantRepository
 import com.remotecontroller.shared.model.ClipEvent
 import com.remotecontroller.shared.model.ClipNote
 import com.remotecontroller.shared.model.ClipRequest
@@ -25,6 +26,7 @@ import kotlinx.coroutines.launch
 
 class ClipboardRepositoryImpl(
     private val http: HttpClient,
+    private val grants: DeviceGrantRepository,
 ) : ClipboardRepository {
     private val outgoing = Channel<String>(Channel.BUFFERED)
 
@@ -35,6 +37,7 @@ class ClipboardRepositoryImpl(
         val cipher = socket.establishLink(
             "${connection.host.value}:${connection.port.value}",
             connection.accessCode,
+            grants,
         )
         val sender = launch {
             for (text in outgoing) {

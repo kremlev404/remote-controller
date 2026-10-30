@@ -98,6 +98,12 @@ class PageSession(
     val streamMessage: StateFlow<String>
         field = MutableStateFlow("Connecting to the screen…")
 
+    val keyboardCaptured: StateFlow<Boolean>
+        field = MutableStateFlow(false)
+
+    val fullscreen: StateFlow<Boolean>
+        field = MutableStateFlow(false)
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var clipSocket: BrowserSocket? = null
     private var streamSocket: BrowserSocket? = null
@@ -110,8 +116,16 @@ class PageSession(
     private val clock = TimeSource.Monotonic
     private var windowStart = clock.markNow()
     private var framesInWindow = 0
+    private val keyboard = installKeyboardCapture(
+        onKey = { code, down -> sendClip(ClipRequest.Key(code, down)) },
+        onReleased = { keyboardCaptured.value = false },
+    )
 
     fun start() {
+        listenForFullscreen { active ->
+            fullscreen.value = active
+            if (active) captureKeyboard() else releaseKeyboard()
+        }
         listenForImagePaste { dataUrl, type ->
             val encoded = dataUrl.substringAfter("base64,", "")
             if (encoded.isNotEmpty()) send(text = "", image = encoded, imageType = type)
@@ -151,7 +165,22 @@ class PageSession(
         sendClip(ClipRequest.Clear)
     }
 
+    fun captureKeyboard() {
+        if (clipCipher == null || frame.value == null || !watching.value) return
+        keyboardCaptured.value = true
+        keyboard.engage()
+    }
+
+    fun releaseKeyboard() {
+        keyboard.release()
+    }
+
+    fun switchFullscreen() {
+        toggleFullscreen()
+    }
+
     fun stopStream() {
+        releaseKeyboard()
         watching.value = false
         hostPaused.value = false
         framesPerSecond.value = 0
@@ -177,6 +206,14 @@ class PageSession(
         )
     }
 
+    fun type(text: String, backspaces: Int) {
+        sendClip(ClipRequest.Type(text, backspaces))
+    }
+
+    fun pressEnter() {
+        sendClip(ClipRequest.Type("\n"))
+    }
+
     fun scroll(x: Float, y: Float, deltaY: Int) {
         if (deltaY == 0) return
         sendClip(
@@ -200,6 +237,7 @@ class PageSession(
     }
 
     fun close() {
+        releaseKeyboard()
         closed = true
         watching.value = false
         clipSocket?.close()
@@ -229,6 +267,7 @@ class PageSession(
             },
             onOpen = {},
             onClose = { code ->
+                releaseKeyboard()
                 clipSocket = null
                 clipCipher = null
                 clipConnected.value = false
@@ -373,12 +412,13 @@ class PageSession(
         scope.launch {
             try {
                 val offer = LinkCrypto.offer(hello.await())
-                if (offer.needsCode && !LinkCrypto.isCode(accessCode)) {
+                val pc = offer.hello.pc.ifBlank { target.deviceId }
+                val usedGrant = grant ?: storedGrant(pc)
+                if (usedGrant == null && offer.needsCode && !LinkCrypto.isCode(accessCode)) {
                     halt(LinkState.NeedsCode(null))
                     socket.close()
                     return@launch
                 }
-                val usedGrant = if (offer.needsCode) null else grant
                 val (join, cipher) = LinkCrypto.join(offer, accessCode, usedGrant, browserLabel())
                 phase[0] = 1
                 socket.send(join)
@@ -387,23 +427,24 @@ class PageSession(
                 if (waiting) linkState.value = LinkState.Waiting(cipher.checkCode)
                 val box = reply.await()
                 if (box != null && box.isEmpty()) {
-                    grant = null
+                    forgetGrant(pc)
                     socket.close()
                     return@launch
                 }
                 val ready = box?.let { runCatching { LinkCrypto.openReady(cipher, it) }.getOrNull() }
                 if (ready == null) {
                     when {
+                        // A socket that dropped says nothing about the grant: only an answer from the PC does.
+                        usedGrant != null -> if (box != null) forgetGrant(pc)
                         offer.needsCode -> halt(LinkState.NeedsCode("The access code does not match this PC."))
                         waiting -> halt(LinkState.Stopped("The PC did not allow this connection."))
-                        else -> grant = null
                     }
                     socket.close()
                     return@launch
                 }
                 val grantId = ready.grantId
                 val grantKey = ready.grantKey
-                if (grantId != null && grantKey != null) grant = LinkGrant(grantId, grantKey)
+                if (grantId != null && grantKey != null) keepGrant(pc, LinkGrant(grantId, grantKey))
                 onReady(cipher)
                 phase[0] = 2
             } catch (error: CancellationException) {
@@ -415,6 +456,21 @@ class PageSession(
         }
         return socket
     }
+
+    private fun storedGrant(pc: String): LinkGrant? =
+        readStored(grantKey(pc))?.let { runCatching { RemoteJson.decode<LinkGrant>(it) }.getOrNull() }
+
+    private fun keepGrant(pc: String, kept: LinkGrant) {
+        grant = kept
+        writeStored(grantKey(pc), RemoteJson.encode(kept))
+    }
+
+    private fun forgetGrant(pc: String) {
+        grant = null
+        removeStored(grantKey(pc))
+    }
+
+    private fun grantKey(pc: String): String = "remote-controller.grant.$pc"
 
     private fun halt(state: LinkState) {
         halted = true

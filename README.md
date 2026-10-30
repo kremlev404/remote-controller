@@ -20,7 +20,9 @@ The laptop is plugged into the TV over HDMI, and you are on the couch. Remote Co
 2. Put the phone on the same Wi-Fi (guest networks that isolate devices will not work), or turn on **Reach from anywhere** (below).
 3. Connect from the phone app or from a browser.
 
-The text row under the mouse pad and on the screen view types on the laptop as you type, in any language. Send on the keyboard presses Enter.
+The text row under the mouse pad and under the screen view, in the app and in the browser, types on the laptop as you type, in any language. Send on the keyboard presses Enter.
+
+In the browser, click the screen to capture the keyboard, as in a virtual machine: every key, Ctrl, Alt, F-keys and shortcuts included, goes to the laptop, and its own layout decides what comes out. Press and let go Ctrl + Alt (Control + Option on a Mac) to get the keyboard back, or click outside the screen. Outside full screen the browser keeps a few shortcuts for itself, such as Ctrl + W and Ctrl + T. **Full screen** captures the keyboard too, and in Chrome and Edge those shortcuts then reach the laptop as well. Hold Esc to leave it.
 
 On the phone's screen view a finger works like a laptop touchpad: drag to move, tap to click, double tap and hold to drag, two fingers to right click (tap) or scroll (drag). **Touch** switches to pressing right where you touch.
 
@@ -31,7 +33,7 @@ On the phone's screen view a finger works like a laptop touchpad: drag to move, 
 | On | types the code | nothing |
 | Off | connects and shows a six-digit check number | pops up **Allow / Deny** with the same number |
 
-An allowed device gets a grant for its other sockets (screen, clipboard), so it asks once. **Disconnect** on the laptop forgets that device. Turning the code back on drops every allowed device. Grants live in memory only, so restarting the app forgets them too.
+A device that got in once, by code or by Allow, gets a grant and is remembered: it comes back without either, also after a restart or when the laptop's address changes. The laptop keeps grants in `devices.json` in its app folder (owner only), the phone app in its private storage, a browser in that site's local storage. The **Remembered** row lists them. **Disconnect** forgets that one device, **Forget all** forgets every one, and turning the code back on does too. Do not use the page on a shared browser: it stays allowed until you forget it.
 
 ## Architecture
 
@@ -55,6 +57,7 @@ Every connection passes three layers:
 ![hello, join, confirm, optional Allow, ready; then AES-256-GCM per direction with sequence numbers](docs/encryption.svg)
 
 - Each socket uses ephemeral P-256 ECDH. HKDF-SHA256 uses the access code, a grant key, or nothing (when the laptop asks its owner) as salt, and a hash of both public keys as info.
+- A grant is a 256-bit key behind a random id. Only the id goes on the socket, and the grant is valid with the code on or off, so anyone who copies it from a device can get in until it is forgotten.
 - The device proves the secret first (`confirm`). Until then the laptop sends nothing sealed, so connecting gives an attacker nothing to test codes against offline.
 - Each direction has its own AES-256-GCM key, and a sequence number goes into the associated data. A replayed, reordered, reflected or altered frame fails to open, and the link drops.
 - Both sides derive the same six-digit check number. The Allow dialog shows it so you can spot a man in the middle.

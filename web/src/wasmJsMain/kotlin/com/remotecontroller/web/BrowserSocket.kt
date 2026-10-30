@@ -73,6 +73,124 @@ fun browserLabel(): String = js(
     "'Web (' + ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || 'browser') + ')'",
 )
 
+external interface KeyboardCapture : JsAny {
+    fun engage()
+    fun release()
+}
+
+/**
+ * While engaged, every key goes to [onKey] and nothing reaches the page or the browser's
+ * shortcuts it allows pages to take. Ctrl + Alt alone, pressed and let go, hands the keyboard
+ * back, so Ctrl + Alt + another key still reaches the PC. Leaving the window hands it back too.
+ * In full screen Chromium browsers also give up Ctrl + W and the like, through the Keyboard Lock API.
+ */
+fun installKeyboardCapture(
+    onKey: (String, Boolean) -> Unit,
+    onReleased: () -> Unit,
+): KeyboardCapture = js(
+    """
+    (() => {
+      const isChord = (code) => /^(Control|Alt)(Left|Right)$/.test(code);
+      const isModifier = (code) => /^(Control|Alt|Shift|Meta)(Left|Right)$/.test(code);
+      const held = new Set();
+      let active = false;
+      let chord = false;
+      const lock = () => {
+        if (!active || !document.fullscreenElement || !navigator.keyboard) return;
+        navigator.keyboard.lock().catch(() => {});
+      };
+      const release = () => {
+        if (!active) return;
+        active = false;
+        chord = false;
+        if (navigator.keyboard) navigator.keyboard.unlock();
+        held.forEach((code) => onKey(code, false));
+        held.clear();
+        onReleased();
+      };
+      window.addEventListener('keydown', (event) => {
+        if (!active) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (!event.code) return;
+        if (isChord(event.code)) {
+          if (event.ctrlKey && event.altKey) chord = true;
+        } else {
+          chord = false;
+        }
+        held.add(event.code);
+        onKey(event.code, true);
+      }, true);
+      window.addEventListener('keyup', (event) => {
+        if (!active) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (!event.code) return;
+        if (chord && isChord(event.code)) {
+          release();
+          return;
+        }
+        // Browsers on a Mac send no keyup for a letter pressed while Command is down.
+        if (event.code === 'MetaLeft' || event.code === 'MetaRight') {
+          held.forEach((code) => {
+            if (isModifier(code)) return;
+            onKey(code, false);
+            held.delete(code);
+          });
+        }
+        held.delete(event.code);
+        onKey(event.code, false);
+      }, true);
+      window.addEventListener('blur', release);
+      return {
+        engage: () => {
+          active = true;
+          lock();
+        },
+        release: release
+      };
+    })()
+    """,
+)
+
+fun canGoFullscreen(): Boolean = js("!!document.fullscreenEnabled")
+
+fun toggleFullscreen() {
+    js(
+        """
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        } else {
+          document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+        }
+        """,
+    )
+}
+
+fun listenForFullscreen(handler: (Boolean) -> Unit) {
+    js("document.addEventListener('fullscreenchange', () => handler(!!document.fullscreenElement))")
+}
+
+/** Phones have no physical keys to capture: their text row is the way to type. */
+fun hasPreciseMouse(): Boolean = js("window.matchMedia('(pointer: fine)').matches")
+
+fun releaseKeysLabel(): String = js(
+    "/Mac|iPhone|iPad/.test(navigator.platform) ? 'Control + Option' : 'Ctrl + Alt'",
+)
+
+/** Null when the browser keeps no site data, as in some private windows. */
+fun readStored(key: String): String? = js(
+    "(() => { try { return localStorage.getItem(key); } catch (error) { return null; } })()",
+)
+
+fun writeStored(key: String, value: String) {
+    js("try { localStorage.setItem(key, value); } catch (error) {}")
+}
+
+fun removeStored(key: String) {
+    js("try { localStorage.removeItem(key); } catch (error) {}")
+}
+
 fun socketOrigin(): String = js(
     "(location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host",
 )

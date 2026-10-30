@@ -1,5 +1,6 @@
 package com.remotecontroller.client.data.remote
 
+import com.remotecontroller.client.domain.repository.DeviceGrantRepository
 import com.remotecontroller.shared.network.AccessCodeRejected
 import com.remotecontroller.shared.network.ApprovalDeclined
 import com.remotecontroller.shared.network.ChunkBuffer
@@ -15,27 +16,11 @@ import io.ktor.websocket.send
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.update
 
-/**
- * Grants from PCs that approved this device (in memory, per endpoint), and the check code
- * of a link that is waiting for the owner to press Allow. Process-wide, like [ServerTrust].
- */
+/** The check code of a link that is waiting for the owner to press Allow. Process-wide, like [ServerTrust]. */
 object LinkSessions {
-    private val grants = MutableStateFlow<Map<String, LinkGrant>>(emptyMap())
-
     val awaitingApproval: StateFlow<String?>
         field = MutableStateFlow(null)
-
-    internal fun grantFor(endpoint: String): LinkGrant? = grants.value[endpoint]
-
-    internal fun remember(endpoint: String, grant: LinkGrant) {
-        grants.update { it + (endpoint to grant) }
-    }
-
-    internal fun forget(endpoint: String) {
-        grants.update { it - endpoint }
-    }
 
     internal fun awaiting(checkCode: String?) {
         awaitingApproval.value = checkCode
@@ -43,50 +28,57 @@ object LinkSessions {
 }
 
 /**
- * hello → join → confirm → ready. With a code the PC answers at once; without one the
- * first socket waits for Allow on the PC and comes back with a grant for the others.
+ * hello → join → confirm → ready. A device the PC remembers gets in with its grant. Otherwise
+ * the code answers at once, or the first socket waits for Allow on the PC. Either way the
+ * PC hands back a grant, kept under the PC's id so a new address changes nothing.
  */
 internal suspend fun WebSocketSession.establishLink(
     endpoint: String,
     code: String,
+    grants: DeviceGrantRepository,
     deviceName: String = "",
 ): LinkCipher {
     val offer = LinkCrypto.offer(readPlainText())
-    val grant = if (offer.needsCode) null else LinkSessions.grantFor(endpoint)
+    val pc = offer.hello.pc.ifBlank { endpoint }
+    val grant = grants.grantFor(pc)
     val (join, cipher) = LinkCrypto.join(offer, code, grant, deviceName)
     send(Frame.Text(join))
     cipher.seal(LinkCrypto.CONFIRM.encodeToByteArray()) { box -> send(Frame.Binary(true, box)) }
     val waiting = !offer.needsCode && grant == null
     if (waiting) LinkSessions.awaiting(cipher.checkCode)
     try {
-        val box = readReply() ?: throw rejection(offer, endpoint, waiting)
-        if (box.isEmpty()) {
-            LinkSessions.forget(endpoint)
+        val box = readReply()
+        if (box != null && box.isEmpty()) {
+            grants.forget(pc)
             throw GrantExpired()
         }
         val ready = try {
-            LinkCrypto.openReady(cipher, box)
+            box?.let { LinkCrypto.openReady(cipher, it) }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Throwable) {
-            throw rejection(offer, endpoint, waiting)
+            null
+        }
+        if (ready == null) {
+            // A socket that dropped says nothing about the grant: only an answer from the PC does.
+            if (grant != null && box == null) throw IllegalStateException("Connection closed")
+            if (grant != null) grants.forget(pc)
+            throw rejection(offer, grant, waiting)
         }
         val id = ready.grantId
         val key = ready.grantKey
-        if (id != null && key != null) LinkSessions.remember(endpoint, LinkGrant(id, key))
+        if (id != null && key != null && id != grant?.id) grants.remember(pc, LinkGrant(id, key))
         return cipher
     } finally {
         if (waiting) LinkSessions.awaiting(null)
     }
 }
 
-private fun rejection(offer: LinkOffer, endpoint: String, waiting: Boolean): Throwable = when {
+private fun rejection(offer: LinkOffer, grant: LinkGrant?, waiting: Boolean): Throwable = when {
+    grant != null -> GrantExpired()
     offer.needsCode -> AccessCodeRejected()
     waiting -> ApprovalDeclined()
-    else -> {
-        LinkSessions.forget(endpoint)
-        GrantExpired()
-    }
+    else -> GrantExpired()
 }
 
 internal suspend fun LinkCipher.sendText(socket: WebSocketSession, text: String) {

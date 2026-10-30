@@ -2,6 +2,7 @@ package com.remotecontroller.client.data.remote
 
 import com.remotecontroller.client.data.log.logInfo
 import com.remotecontroller.client.data.log.logWarn
+import com.remotecontroller.client.domain.repository.DeviceGrantRepository
 import com.remotecontroller.shared.model.PcHost
 import com.remotecontroller.shared.model.RemoteCommand
 import com.remotecontroller.shared.model.RemoteCommand.Hello
@@ -44,6 +45,7 @@ interface PcLink {
 class PcSocketClient(
     private val http: HttpClient,
     private val deviceIdentity: DeviceIdentity,
+    private val grants: DeviceGrantRepository,
 ) : PcTransport {
 
     override suspend fun open(host: PcHost, port: ServerPort, accessCode: String): PcLink {
@@ -72,7 +74,7 @@ class PcSocketClient(
             http.webSocketSession("wss://$endpoint${RemoteProtocol.WS_PATH}")
         }
         logInfo(TAG, "websocket open $endpoint")
-        val cipher = socket.establishLink(endpoint, accessCode, deviceName())
+        val cipher = socket.establishLink(endpoint, accessCode, grants, deviceName())
         val link = KtorLink(socket, cipher)
         try {
             link.send(Hello(deviceName()))

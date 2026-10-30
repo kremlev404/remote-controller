@@ -1,5 +1,6 @@
 package com.remotecontroller.client.data.remote
 
+import com.remotecontroller.client.domain.repository.DeviceGrantRepository
 import com.remotecontroller.shared.network.ChunkBuffer
 import com.remotecontroller.shared.network.LinkFrame
 import com.remotecontroller.shared.network.RemoteProtocol
@@ -17,11 +18,12 @@ import kotlinx.coroutines.withContext
 
 class ScreenStreamClient(
     private val http: HttpClient,
+    private val grants: DeviceGrantRepository,
 ) {
     fun frames(host: String, port: Int, accessCode: String): Flow<ScreenFeed> = flow {
         val socket = http.webSocketSession("wss://$host:$port${RemoteProtocol.STREAM_PATH}")
         try {
-            val cipher = socket.establishLink("$host:$port", accessCode)
+            val cipher = socket.establishLink("$host:$port", accessCode, grants)
             val frames = ChunkBuffer()
             for (frame in socket.incoming) {
                 when (frame) {

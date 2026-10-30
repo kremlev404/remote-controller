@@ -9,6 +9,8 @@ class KeyboardSimulator(
 ) {
 
     private val robot = Robot().apply { setAutoDelay(30) }
+    private val liveRobot = Robot().apply { autoDelay = 0 }
+    private val held = LinkedHashSet<Int>()
 
     fun pressKey(keyName: String) {
         if (keyName.uppercase() in MEDIA_KEYS && mediaKeys.send(keyName.uppercase())) return
@@ -42,6 +44,29 @@ class KeyboardSimulator(
             }
         }
         flushTyped(run)
+    }
+
+    /** Holds the key until the browser says it went up, so shortcuts and auto-repeat work. */
+    fun key(code: String, down: Boolean) {
+        val keyCode = PhysicalKeys.keyCode(code) ?: return
+        synchronized(held) {
+            runCatching {
+                if (down) {
+                    liveRobot.keyPress(keyCode)
+                    held.add(keyCode)
+                } else if (held.remove(keyCode)) {
+                    liveRobot.keyRelease(keyCode)
+                }
+            }
+        }
+    }
+
+    /** A browser can vanish with a key down: without this the PC would keep it pressed. */
+    fun releaseKeys() {
+        synchronized(held) {
+            held.reversed().forEach { keyCode -> runCatching { liveRobot.keyRelease(keyCode) } }
+            held.clear()
+        }
     }
 
     private fun flushTyped(run: StringBuilder) {

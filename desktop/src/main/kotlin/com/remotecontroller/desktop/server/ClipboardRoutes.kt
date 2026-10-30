@@ -16,12 +16,12 @@ internal fun Routing.clipboardRoutes(serve: suspend (LinkSocket) -> Unit) {
     }
 }
 
-/** The browser page's socket: clipboard notes and pointer input. */
+/** The browser page's socket: clipboard notes, pointer input and typing. */
 internal suspend fun serveClipboard(
     link: LinkSocket,
     gate: LinkGate,
     clipboard: ClipboardExchange,
-    onPointer: (RemoteCommand) -> Unit,
+    onInput: (RemoteCommand) -> Unit,
     onBrowserListed: (String) -> Unit,
     onBrowserGone: (String) -> Unit,
     log: (String) -> Unit,
@@ -51,7 +51,7 @@ internal suspend fun serveClipboard(
                         clipboard.handle(
                             browser = browser,
                             text = text,
-                            onPointer = onPointer,
+                            onInput = onInput,
                             onPresence = { onBrowserListed(endpoint) },
                         )
                     }.onFailure { error ->

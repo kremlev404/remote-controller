@@ -28,6 +28,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -100,6 +102,8 @@ fun DesktopApp(viewModel: DesktopViewModel = koinViewModel()) {
                     screenMode = uiState.screenMode,
                     inputBlocked = uiState.inputBlocked,
                     onAllowInput = viewModel::allowInput,
+                    rememberedDevices = uiState.rememberedDevices,
+                    onForgetDevices = viewModel::forgetDevices,
                     onSelectDisplay = viewModel::selectDisplay,
                     onSelectScreenMode = viewModel::setScreenMode,
                     onStartSharing = viewModel::resumeSharing,
@@ -393,6 +397,8 @@ private fun ServerStatusCard(
     screenMode: ScreenMode,
     inputBlocked: Boolean,
     onAllowInput: () -> Unit,
+    rememberedDevices: List<String>,
+    onForgetDevices: () -> Unit,
     onSelectDisplay: (String) -> Unit,
     onSelectScreenMode: (ScreenMode) -> Unit,
     onStartSharing: () -> Unit,
@@ -532,6 +538,23 @@ private fun ServerStatusCard(
                 clients = server.clients,
                 onDisconnect = onDisconnectClient,
             )
+            if (rememberedDevices.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Remembered: ${rememberedDevices.joinToString(", ")}",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    TextButton(onClick = onForgetDevices) { Text("Forget all") }
+                }
+            }
             ScreenShareRow(
                 displays = displays,
                 selectedDisplayId = selectedDisplayId,
@@ -946,20 +969,9 @@ private fun ScreenShareRow(
             FilledTonalButton(onClick = onStart, enabled = paused) { Text("Start") }
             OutlinedButton(onClick = onStop, enabled = !paused) { Text("Stop") }
             OutlinedButton(onClick = onRestart) { Text("Restart") }
+            ScreenModeMenu(mode = mode, onSelect = onSelectMode)
             if (needsAccess) {
                 TextButton(onClick = onGrant) { Text("Allow access") }
-            }
-        }
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            ScreenMode.entries.forEach { option ->
-                FilterChip(
-                    selected = option == mode,
-                    onClick = { onSelectMode(option) },
-                    label = { Text("${option.label} · ${option.framesPerSecond} fps") },
-                )
             }
         }
         if (displays.size > 1) {
@@ -974,6 +986,34 @@ private fun ScreenShareRow(
                         label = { Text(display.label) },
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScreenModeMenu(
+    mode: ScreenMode,
+    onSelect: (ScreenMode) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(
+            onClick = { open = true },
+            contentPadding = PaddingValues(start = 16.dp, end = 8.dp),
+        ) {
+            Text("${mode.framesPerSecond} fps")
+            Icon(imageVector = DesktopIcons.ArrowDropDown, contentDescription = "Frame rate")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            ScreenMode.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text("${option.label} · ${option.framesPerSecond} fps") },
+                    onClick = {
+                        onSelect(option)
+                        open = false
+                    },
+                )
             }
         }
     }

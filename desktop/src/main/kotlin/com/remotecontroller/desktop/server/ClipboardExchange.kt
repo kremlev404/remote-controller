@@ -73,7 +73,7 @@ class ClipboardExchange {
     internal suspend fun handle(
         browser: ClipBrowser,
         text: String,
-        onPointer: (RemoteCommand) -> Unit,
+        onInput: (RemoteCommand) -> Unit,
         onPresence: (ClipBrowser) -> Unit,
     ) {
         val request = runCatching { RemoteJson.decode<ClipRequest>(text) }.getOrElse {
@@ -91,7 +91,7 @@ class ClipboardExchange {
                     onPresence(browser)
                 }
             }
-            is ClipRequest.Pointer -> onPointer(
+            is ClipRequest.Pointer -> onInput(
                 RemoteCommand.Pointer(
                     x = request.x,
                     y = request.y,
@@ -99,13 +99,15 @@ class ClipboardExchange {
                     button = request.button,
                 ),
             )
-            is ClipRequest.Scroll -> onPointer(
+            is ClipRequest.Scroll -> onInput(
                 RemoteCommand.PointerScroll(
                     x = request.x,
                     y = request.y,
                     deltaY = request.deltaY.coerceIn(-20, 20),
                 ),
             )
+            is ClipRequest.Type -> onInput(RemoteCommand.TypeText(request.text, request.backspaces))
+            is ClipRequest.Key -> onInput(RemoteCommand.KeyState(request.code, request.down))
         }
     }
 

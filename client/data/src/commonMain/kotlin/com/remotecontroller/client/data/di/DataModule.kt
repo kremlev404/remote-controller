@@ -18,9 +18,9 @@ expect fun platformDataModule(): Module
 val dataModule = module {
     includes(platformDataModule())
     single { AppScope() }
-    single<PcTransport> { PcSocketClient(get(), get()) }
-    single { ScreenStreamClient(get()) }
+    single<PcTransport> { PcSocketClient(get(), get(), get()) }
+    single { ScreenStreamClient(get(), get()) }
     single<RemoteRepository> { RemoteRepositoryImpl(get(), get(), get()) }
     single<ScreenRepository> { ScreenRepositoryImpl(get()) }
-    single<ClipboardRepository> { ClipboardRepositoryImpl(get()) }
+    single<ClipboardRepository> { ClipboardRepositoryImpl(get(), get()) }
 }

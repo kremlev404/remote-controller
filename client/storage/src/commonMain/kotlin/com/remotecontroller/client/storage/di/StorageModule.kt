@@ -1,7 +1,9 @@
 package com.remotecontroller.client.storage.di
 
 import com.remotecontroller.client.domain.repository.ConnectionPreferencesRepository
+import com.remotecontroller.client.domain.repository.DeviceGrantRepository
 import com.remotecontroller.client.domain.repository.ThemePreferencesRepository
+import com.remotecontroller.client.storage.local.DeviceGrantStore
 import com.remotecontroller.client.storage.local.SavedServerDatabase
 import com.remotecontroller.client.storage.local.SavedServerStore
 import com.remotecontroller.client.storage.local.ThemePreferencesStore
@@ -20,5 +22,6 @@ val storageModule = module {
     single { SavedServerStore(get(), get()) }
     single { ThemePreferencesStore(get()) }
     single<ConnectionPreferencesRepository> { ConnectionPreferencesRepositoryImpl(get()) }
+    single<DeviceGrantRepository> { DeviceGrantStore(get()) }
     single<ThemePreferencesRepository> { ThemePreferencesRepositoryImpl(get()) }
 }

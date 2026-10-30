@@ -61,6 +61,11 @@ sealed interface RemoteCommand {
     @SerialName("type_text")
     data class TypeText(val text: String, val backspaces: Int = 0) : RemoteCommand
 
+    /** One physical key going down or up, from a captured keyboard. [code] is `KeyboardEvent.code`. */
+    @Serializable
+    @SerialName("key_state")
+    data class KeyState(val code: String, val down: Boolean) : RemoteCommand
+
     @Serializable
     @SerialName("mouse_move")
     data class MouseMove(val dx: Int, val dy: Int) : RemoteCommand
@@ -103,6 +108,7 @@ fun RemoteCommand.describe(): String = when (this) {
     is RemoteCommand.KeyPress -> "Key: $key"
     is RemoteCommand.KeyCombo -> "Combo: ${keys.joinToString("+")}"
     is RemoteCommand.TypeText -> "Typed text"
+    is RemoteCommand.KeyState -> "Keyboard"
     is RemoteCommand.MouseMove -> "Mouse move ($dx, $dy)"
     is RemoteCommand.MouseClick -> "Mouse ${button.lowercase()} click"
     is RemoteCommand.MouseScroll -> "Mouse scroll $deltaY"

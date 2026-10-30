@@ -46,7 +46,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -60,6 +62,7 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import com.remotecontroller.client.core.TypingRow
 import com.remotecontroller.shared.model.ClipNote
 import com.remotecontroller.shared.model.RemoteKeys
 import com.remotecontroller.shared.network.LinkCrypto
@@ -242,10 +245,25 @@ private fun LinkedSession(target: PageTarget) {
         val watching by session.watching.collectAsState()
         val hostPaused by session.hostPaused.collectAsState()
         val streamMessage by session.streamMessage.collectAsState()
+        val keyboardCaptured by session.keyboardCaptured.collectAsState()
+        val fullscreen by session.fullscreen.collectAsState()
         var draft by remember { mutableStateOf("") }
         var rightClick by remember { mutableStateOf(false) }
 
-        BoxWithConstraints(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .pointerInput(session) {
+                    // Runs before the picture sees the press: a click anywhere else gives the keyboard back.
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.type == PointerEventType.Press) session.releaseKeyboard()
+                        }
+                    }
+                },
+        ) {
             val wide = maxWidth >= 840.dp
             if (wide) {
                 Row(modifier = Modifier.fillMaxSize()) {
@@ -261,21 +279,29 @@ private fun LinkedSession(target: PageTarget) {
                         onRightClick = { rightClick = !rightClick },
                         onPointer = session::pointer,
                         onScroll = session::scroll,
+                        onType = session::type,
+                        onEnter = session::pressEnter,
+                        keyboardCaptured = keyboardCaptured,
+                        onCaptureKeyboard = session::captureKeyboard,
+                        fullscreen = fullscreen,
+                        onToggleFullscreen = session::switchFullscreen,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                     )
-                    ChatPane(
-                        notes = notes,
-                        banner = banner,
-                        connected = connected,
-                        draft = draft,
-                        onDraft = { draft = it },
-                        onSend = {
-                            session.send(draft)
-                            draft = ""
-                        },
-                        onClear = session::clearHistory,
-                        modifier = Modifier.width(360.dp).fillMaxHeight(),
-                    )
+                    if (!fullscreen) {
+                        ChatPane(
+                            notes = notes,
+                            banner = banner,
+                            connected = connected,
+                            draft = draft,
+                            onDraft = { draft = it },
+                            onSend = {
+                                session.send(draft)
+                                draft = ""
+                            },
+                            onClear = session::clearHistory,
+                            modifier = Modifier.width(360.dp).fillMaxHeight(),
+                        )
+                    }
                 }
             } else {
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -291,21 +317,29 @@ private fun LinkedSession(target: PageTarget) {
                         onRightClick = { rightClick = !rightClick },
                         onPointer = session::pointer,
                         onScroll = session::scroll,
+                        onType = session::type,
+                        onEnter = session::pressEnter,
+                        keyboardCaptured = keyboardCaptured,
+                        onCaptureKeyboard = session::captureKeyboard,
+                        fullscreen = fullscreen,
+                        onToggleFullscreen = session::switchFullscreen,
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
-                    ChatPane(
-                        notes = notes,
-                        banner = banner,
-                        connected = connected,
-                        draft = draft,
-                        onDraft = { draft = it },
-                        onSend = {
-                            session.send(draft)
-                            draft = ""
-                        },
-                        onClear = session::clearHistory,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 220.dp, max = 320.dp),
-                    )
+                    if (!fullscreen) {
+                        ChatPane(
+                            notes = notes,
+                            banner = banner,
+                            connected = connected,
+                            draft = draft,
+                            onDraft = { draft = it },
+                            onSend = {
+                                session.send(draft)
+                                draft = ""
+                            },
+                            onClear = session::clearHistory,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 220.dp, max = 320.dp),
+                        )
+                    }
                 }
             }
         }
@@ -324,52 +358,118 @@ private fun StreamPane(
     onRightClick: () -> Unit,
     onPointer: (Float, Float, String, String) -> Unit,
     onScroll: (Float, Float, Int) -> Unit,
+    onType: (String, Int) -> Unit,
+    onEnter: () -> Unit,
+    keyboardCaptured: Boolean,
+    onCaptureKeyboard: () -> Unit,
+    fullscreen: Boolean,
+    onToggleFullscreen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.background(Color.Black)) {
-        if (frame != null) {
-            DesktopPicture(
-                image = frame,
-                button = if (rightClick) "RIGHT" else "LEFT",
-                onPointer = onPointer,
-                onScroll = onScroll,
-            )
-        } else {
-            Text(
-                text = message,
-                color = Color.White,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.align(Alignment.Center).padding(24.dp),
+    Column(modifier = modifier.background(Color.Black)) {
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (frame != null) {
+                DesktopPicture(
+                    image = frame,
+                    button = if (rightClick) "RIGHT" else "LEFT",
+                    onPointer = onPointer,
+                    onScroll = onScroll,
+                    onMouseDown = onCaptureKeyboard,
+                )
+                KeyboardHint(
+                    captured = keyboardCaptured,
+                    fullscreen = fullscreen,
+                    modifier = Modifier.align(Alignment.TopCenter).padding(16.dp),
+                )
+            } else {
+                Text(
+                    text = message,
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(16.dp)
+                    .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = when {
+                        !watching -> "Stopped"
+                        hostPaused -> "Paused on the computer"
+                        frame == null -> "Screen"
+                        else -> "$framesPerSecond fps"
+                    },
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+                TextButton(onClick = { if (watching) onStop() else onResume() }) {
+                    Text(if (watching) "Stop" else "Resume", color = Color.White)
+                }
+                if (frame != null && canGoFullscreen()) {
+                    TextButton(onClick = onToggleFullscreen) {
+                        Text(if (fullscreen) "Exit full screen" else "Full screen", color = Color.White)
+                    }
+                }
+                if (frame != null) {
+                    FilterChip(
+                        selected = rightClick,
+                        onClick = onRightClick,
+                        label = { Text("Right click") },
+                    )
+                }
+            }
+        }
+        if (!fullscreen) {
+            TypingRow(
+                onType = onType,
+                onEnter = onEnter,
+                modifier = Modifier.padding(8.dp),
             )
         }
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(16.dp)
-                .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = when {
-                    !watching -> "Stopped"
-                    hostPaused -> "Paused on the computer"
-                    frame == null -> "Screen"
-                    else -> "$framesPerSecond fps"
-                },
-                color = Color.White,
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(start = 8.dp),
+    }
+}
+
+@Composable
+private fun KeyboardHint(
+    captured: Boolean,
+    fullscreen: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (!captured && !hasPreciseMouse()) return
+    Column(
+        modifier = modifier
+            .background(
+                if (captured) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.7f),
+                RoundedCornerShape(16.dp),
             )
-            TextButton(onClick = { if (watching) onStop() else onResume() }) {
-                Text(if (watching) "Stop" else "Resume", color = Color.White)
-            }
-            if (frame != null) {
-                FilterChip(
-                    selected = rightClick,
-                    onClick = onRightClick,
-                    label = { Text("Right click") },
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        val color = if (captured) MaterialTheme.colorScheme.onPrimary else Color.White
+        Text(
+            text = if (captured) "Keyboard captured" else "Click the screen to capture the keyboard",
+            color = color,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+        if (captured) {
+            Text(
+                text = "Press ${releaseKeysLabel()} to release it",
+                color = color,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            if (fullscreen) {
+                Text(
+                    text = "Hold Esc to leave full screen",
+                    color = color,
+                    style = MaterialTheme.typography.titleMedium,
                 )
             }
         }
@@ -382,6 +482,7 @@ private fun DesktopPicture(
     button: String,
     onPointer: (Float, Float, String, String) -> Unit,
     onScroll: (Float, Float, Int) -> Unit,
+    onMouseDown: () -> Unit,
 ) {
     val imageWidth = image.width
     val imageHeight = image.height
@@ -407,6 +508,7 @@ private fun DesktopPicture(
                         }
                         return@awaitEachGesture
                     }
+                    if (first.type == PointerType.Mouse) onMouseDown()
                     val buttonName = if (currentEvent.buttons.isSecondaryPressed) "RIGHT" else button
                     var last = placed.normalize(first.position)
                     onPointer(last.x, last.y, RemoteKeys.POINTER_DOWN, buttonName)

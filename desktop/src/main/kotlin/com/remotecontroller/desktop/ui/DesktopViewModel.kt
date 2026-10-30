@@ -57,6 +57,7 @@ data class DesktopUiState(
     val screenMode: ScreenMode = ScreenMode.BALANCED,
     val darkTheme: Boolean? = null,
     val inputBlocked: Boolean = false,
+    val rememberedDevices: List<String> = emptyList(),
     val clipNotes: List<ClipNote> = emptyList(),
     val clipBrowsers: Int = 0,
     val shareClipboard: Boolean = false,
@@ -202,6 +203,12 @@ class DesktopViewModel(
         }
 
         viewModelScope.launch {
+            commandServer.rememberedDevices.collect { devices ->
+                uiState.update { it.copy(rememberedDevices = devices) }
+            }
+        }
+
+        viewModelScope.launch {
             combine(
                 settings.requireCode,
                 approvals.pending,
@@ -279,6 +286,10 @@ class DesktopViewModel(
 
     fun allowInput() {
         InputAccess.request()
+    }
+
+    fun forgetDevices() {
+        commandServer.forgetDevices()
     }
 
     fun pauseSharing() {

@@ -3,6 +3,7 @@ package com.remotecontroller.desktop.server
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.io.File
+import java.util.UUID
 import java.util.prefs.Preferences
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -40,6 +41,11 @@ class DesktopSettings {
     val darkTheme: StateFlow<Boolean?>
         field = MutableStateFlow(prefs.get(KEY_DARK_THEME, null)?.toBooleanStrictOrNull())
 
+    /** Tells this PC apart from others whatever its address is. Clients keep their grant under it. */
+    val pcId: String by lazy {
+        prefs.get(KEY_PC_ID, null) ?: UUID.randomUUID().toString().also { prefs.put(KEY_PC_ID, it) }
+    }
+
     fun setRequireCode(enabled: Boolean) {
         prefs.putBoolean(KEY_REQUIRE_CODE, enabled)
         requireCode.value = enabled
@@ -72,6 +78,7 @@ class DesktopSettings {
         const val KEY_RELAY_URL = "relayUrl"
         const val KEY_SCREEN_MODE = "screenMode"
         const val KEY_DARK_THEME = "darkTheme"
+        const val KEY_PC_ID = "pcId"
         const val DEFAULT_RELAY_URL = ""
     }
 }

@@ -4,14 +4,21 @@ import com.remotecontroller.shared.network.ChunkBuffer
 import com.remotecontroller.shared.network.LinkAuth
 import com.remotecontroller.shared.network.LinkCrypto
 import com.remotecontroller.shared.network.LinkGrant
+import com.remotecontroller.shared.network.RemoteJson
 import io.ktor.websocket.Frame
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.Serializable
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.SecureRandom
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
@@ -32,8 +39,8 @@ internal class LinkSocket(
 
 /**
  * Runs the link handshake for every socket: address and Origin checks, a time limit,
- * a cap on handshakes in flight, a back-off for peers that keep failing, then the
- * access code or the owner's approval.
+ * a cap on handshakes in flight, a back-off for peers that keep failing, then a remembered
+ * device's grant, the access code or the owner's approval.
  */
 internal class LinkGate(
     private val pairingCode: String,
@@ -72,7 +79,7 @@ internal class LinkGate(
         val endpoint = link.endpoint
         val auth = if (settings.requireCode.value) LinkAuth.CODE else LinkAuth.APPROVE
         val identity = LinkCrypto.generate()
-        SocketFrames.sendText(endpoint, LinkCrypto.hello(identity, auth))
+        SocketFrames.sendText(endpoint, LinkCrypto.hello(identity, auth, settings.pcId))
         val join = withTimeoutOrNull(HANDSHAKE_TIMEOUT) {
             readText(endpoint, link.incoming)?.let(LinkCrypto::readJoin)
         } ?: return false
@@ -80,7 +87,6 @@ internal class LinkGate(
         var grant: LinkGrant? = null
         val grantId = join.grant
         val secret = when {
-            auth == LinkAuth.CODE -> LinkCrypto.codeSecret(pairingCode)
             grantId != null -> {
                 grant = grants.find(grantId)
                 if (grant == null) {
@@ -89,6 +95,7 @@ internal class LinkGate(
                 }
                 LinkCrypto.grantSecret(grant.key)
             }
+            auth == LinkAuth.CODE -> LinkCrypto.codeSecret(pairingCode)
             else -> ByteArray(0)
         }
         val cipher = LinkCrypto.accept(identity, join, secret)
@@ -98,19 +105,18 @@ internal class LinkGate(
         } ?: false
         if (!confirmed) {
             throttle.failed(peer)
-            log(if (auth == LinkAuth.CODE) "wrong access code from $peer" else "broken handshake from $peer")
+            log(if (auth == LinkAuth.CODE && grant == null) "wrong access code from $peer" else "broken handshake from $peer")
             return false
         }
 
-        if (auth == LinkAuth.APPROVE && grant == null) {
+        if (grant == null) {
             val name = join.name.replace(Regex("\\s+"), " ").trim().take(48).ifBlank { "Unknown device" }
-            val allowed = askOwner(link, name, peer, cipher.checkCode)
-            if (!allowed) {
+            if (auth == LinkAuth.APPROVE && !askOwner(link, name, peer, cipher.checkCode)) {
                 throttle.failed(peer)
                 log("connection from $name ($peer) was not allowed")
                 return false
             }
-            grant = grants.issue()
+            grant = grants.issue(name)
         }
 
         val ready = LinkCrypto.readyText(grant).encodeToByteArray()
@@ -175,31 +181,82 @@ internal class LinkGate(
     }
 }
 
-/** Grants live in memory: a restart of the app, or turning the code back on, forgets them. */
-internal class LinkGrants {
-    private val grants = ConcurrentHashMap<String, LinkGrant>()
+/**
+ * Devices that got in once: by code or by Allow. Kept in an owner-only file, so they come back
+ * without asking, also after a restart. Disconnect, Forget all or turning the code back on ends that.
+ */
+internal class LinkGrants(
+    private val file: File = File(AppFiles.directory, FILE_NAME),
+) {
+    private val devices = LinkedHashMap<String, RememberedDevice>()
     private val random = SecureRandom()
 
-    fun issue(): LinkGrant {
-        val grant = LinkGrant(id = token(16), key = Base64.getEncoder().encodeToString(bytes(32)))
-        grants[grant.id] = grant
-        return grant
+    val names: StateFlow<List<String>>
+        field = MutableStateFlow(emptyList())
+
+    init {
+        runCatching {
+            if (file.exists()) {
+                RemoteJson.decode<List<RememberedDevice>>(file.readText()).forEach { devices[it.grant.id] = it }
+            }
+        }
+        publish()
     }
 
-    fun find(id: String): LinkGrant? = grants[id]
+    fun issue(name: String): LinkGrant = synchronized(devices) {
+        // Old clients ask for a new grant on every socket: never let those fill the file.
+        while (devices.size >= MAX_DEVICES) devices.remove(devices.keys.first())
+        val grant = LinkGrant(id = token(16), key = Base64.getEncoder().encodeToString(bytes(32)))
+        devices[grant.id] = RememberedDevice(grant, name)
+        save()
+        grant
+    }
+
+    fun find(id: String): LinkGrant? = synchronized(devices) { devices[id]?.grant }
 
     fun revoke(id: String) {
-        grants.remove(id)
+        synchronized(devices) {
+            if (devices.remove(id) != null) save()
+        }
     }
 
     fun revokeAll() {
-        grants.clear()
+        synchronized(devices) {
+            devices.clear()
+            save()
+        }
+    }
+
+    private fun save() {
+        publish()
+        runCatching {
+            val draft = File(file.parentFile, "${file.name}.tmp")
+            draft.writeText("")
+            AppFiles.restrict(draft)
+            draft.writeText(RemoteJson.encode(devices.values.toList()))
+            Files.move(draft.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        }
+    }
+
+    private fun publish() {
+        names.value = devices.values.map { it.name }.distinct()
     }
 
     private fun bytes(size: Int): ByteArray = ByteArray(size).also(random::nextBytes)
 
     private fun token(size: Int): String = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes(size))
+
+    private companion object {
+        const val FILE_NAME = "devices.json"
+        const val MAX_DEVICES = 64
+    }
 }
+
+@Serializable
+private data class RememberedDevice(
+    val grant: LinkGrant,
+    val name: String,
+)
 
 /** Five failures in a minute, then that peer waits five minutes. */
 internal class AdmissionThrottle {
