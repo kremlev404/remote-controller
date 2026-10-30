@@ -11,7 +11,10 @@
             background: #0E0E10;
             overflow: hidden;
         }
+        /* The video canvas sits between the page background and Compose, which leaves a hole for it. */
         #composeApp {
+            position: relative;
+            z-index: 1;
             width: 100%;
             height: 100%;
         }

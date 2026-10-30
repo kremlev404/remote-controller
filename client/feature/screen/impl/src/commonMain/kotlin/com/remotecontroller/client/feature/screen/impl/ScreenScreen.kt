@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,7 +38,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
@@ -97,7 +97,10 @@ fun ScreenScreen(
                     .weight(1f),
             ) {
                 val image = uiState.image
-                if (image == null) {
+                val video = uiState.video
+                val pictureWidth = image?.width ?: video?.width
+                val pictureHeight = image?.height ?: video?.height
+                if (pictureWidth == null || pictureHeight == null) {
                     Text(
                         text = uiState.message ?: "Connecting to the screen…",
                         modifier = Modifier
@@ -108,7 +111,27 @@ fun ScreenScreen(
                     )
                 } else {
                     DesktopPicture(
-                        image = image,
+                        imageWidth = pictureWidth,
+                        imageHeight = pictureHeight,
+                        picture = { modifier ->
+                            if (image != null) {
+                                Image(
+                                    bitmap = image,
+                                    contentDescription = "Desktop",
+                                    contentScale = ContentScale.Fit,
+                                    modifier = modifier,
+                                )
+                            } else {
+                                VideoSurface(
+                                    frames = viewModel.videoFrames,
+                                    width = pictureWidth,
+                                    height = pictureHeight,
+                                    onRate = viewModel::videoRate,
+                                    onLost = viewModel::videoLost,
+                                    modifier = modifier,
+                                )
+                            }
+                        },
                         touchMode = uiState.touchMode,
                         cursor = Offset(uiState.cursorX, uiState.cursorY),
                         pointerScale = uiState.pointerScale,
@@ -153,7 +176,7 @@ fun ScreenScreen(
                         )
                     }
                     Text(
-                        text = if (image == null) "Screen" else "${uiState.framesPerSecond} fps",
+                        text = if (uiState.hasPicture) "${uiState.framesPerSecond} fps" else "Screen",
                         color = Color.White,
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(end = 8.dp),
@@ -194,7 +217,9 @@ private class TrackpadActions(
 
 @Composable
 private fun DesktopPicture(
-    image: ImageBitmap,
+    imageWidth: Int,
+    imageHeight: Int,
+    picture: @Composable (Modifier) -> Unit,
     touchMode: Boolean,
     cursor: Offset,
     pointerScale: Float,
@@ -206,8 +231,6 @@ private fun DesktopPicture(
     onScroll: (Float, Float, Int) -> Unit,
     onRelease: () -> Unit,
 ) {
-    val imageWidth = image.width
-    val imageHeight = image.height
     val downState = rememberUpdatedState(onDown)
     val moveState = rememberUpdatedState(onMove)
     val upState = rememberUpdatedState(onUp)
@@ -302,11 +325,11 @@ private fun DesktopPicture(
                 }
             },
     ) {
-        Image(
-            bitmap = image,
-            contentDescription = "Desktop",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize(),
+        picture(
+            Modifier
+                .align(Alignment.Center)
+                .aspectRatio(imageWidth.toFloat() / imageHeight, matchHeightConstraintsFirst = false)
+                .fillMaxSize(),
         )
         Canvas(modifier = Modifier.fillMaxSize()) {
             val placed = letterbox(size.width, size.height, imageWidth, imageHeight)

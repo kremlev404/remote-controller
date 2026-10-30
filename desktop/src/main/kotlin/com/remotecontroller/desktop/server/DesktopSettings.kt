@@ -8,11 +8,16 @@ import java.util.prefs.Preferences
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-/** Frame rate cap of the screen stream. All viewers share one capture loop, so they share the mode. */
-enum class ScreenMode(val label: String, val framesPerSecond: Int) {
-    ECONOMY("Economy", 15),
-    BALANCED("Balanced", 30),
-    PERFORMANCE("Performance", 60);
+/** Picture cap of the screen stream. All viewers share one capture loop, so they share the mode. */
+enum class ScreenMode(
+    val label: String,
+    val framesPerSecond: Int,
+    val longEdge: Int,
+    val bitrate: Int,
+) {
+    ECONOMY("Economy", 15, 1280, 3_000_000),
+    BALANCED("Balanced", 30, 1920, 8_000_000),
+    PERFORMANCE("Performance", 60, 1920, 16_000_000);
 
     val frameInterval: Duration = 1.seconds / framesPerSecond
 

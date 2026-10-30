@@ -1,5 +1,6 @@
 package com.remotecontroller.desktop.executor
 
+import com.remotecontroller.shared.network.ScreenCodec
 import com.remotecontroller.shared.network.ScreenFrame
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -62,7 +63,16 @@ class ScreenCapturer(
     val sharingPaused: StateFlow<Boolean>
         field = MutableStateFlow(false)
 
+    /** What the viewers actually get, so a fallback to JPEG is never a silent one. */
+    val streamCodec: StateFlow<String>
+        field = MutableStateFlow("")
+
+    /** Streaming with nothing to send: a still screen costs no frames. */
+    val videoLive: StateFlow<Boolean>
+        get() = video.live
+
     private val watchers = LinkedHashSet<String>()
+    private val videoViewers = LinkedHashSet<String>()
     private val sends = HashMap<String, Job>()
     private val watcherLock = Any()
     private val selectionLock = Any()
@@ -71,6 +81,16 @@ class ScreenCapturer(
         Thread(runnable, "screen-capture").apply { isDaemon = true }
     }.asCoroutineDispatcher()
     private var job: Job? = null
+    private val videoFrames = FrameMeter { fps -> framesPerSecond.value = fps }
+    private val video = VideoStream(
+        settings = settings,
+        scope = scope,
+        displayIndex = ::selectedDisplayIndex,
+        onFrame = videoFrames::count,
+        onStopped = { framesPerSecond.value = 0 },
+        onFailure = { message -> captureError.value = message },
+        onUnavailable = ::moveToJpeg,
+    )
 
     @Volatile
     private var captureBounds: Rectangle? = null
@@ -109,25 +129,38 @@ class ScreenCapturer(
         return Point(px, py)
     }
 
-    fun watch(endpoint: String) {
-        synchronized(watcherLock) {
+    /** H.264 when the viewer plays it and this PC encodes it, JPEG otherwise. Returns what was picked, and why. */
+    fun watch(endpoint: String, codecs: List<String>): String = synchronized(watcherLock) {
+        val wantsVideo = ScreenCodec.H264 in codecs
+        val picked = if (wantsVideo && video.canStream) {
+            videoViewers.add(endpoint)
+            video.add(endpoint)
+            "H.264"
+        } else {
             watchers.add(endpoint)
-            viewerCount.value = watchers.size
             startLoopLocked()
+            if (wantsVideo) "JPEG: ${video.unavailableReason}" else "JPEG: this client did not ask for H.264"
         }
+        publishViewersLocked()
+        picked
     }
 
     fun unwatch(endpoint: String) {
         synchronized(watcherLock) {
+            if (videoViewers.remove(endpoint)) video.remove(endpoint)
             sends.remove(endpoint)?.cancel()
-            if (!watchers.remove(endpoint)) return
-            viewerCount.value = watchers.size
-            if (watchers.isEmpty()) job?.cancel()
+            if (watchers.remove(endpoint) && watchers.isEmpty()) job?.cancel()
+            publishViewersLocked()
         }
+    }
+
+    fun requestKeyframe(endpoint: String) {
+        video.requestKeyframe(endpoint)
     }
 
     fun pauseSharing() {
         sharingPaused.value = true
+        video.pause()
         synchronized(watcherLock) {
             job?.cancel()
         }
@@ -136,6 +169,7 @@ class ScreenCapturer(
 
     fun resumeSharing() {
         sharingPaused.value = false
+        video.resume()
         synchronized(watcherLock) {
             startLoopLocked()
         }
@@ -144,6 +178,7 @@ class ScreenCapturer(
     fun restartSharing() {
         sharingPaused.value = false
         captureError.value = null
+        video.restart()
         synchronized(watcherLock) {
             job?.cancel()
             job = null
@@ -153,15 +188,40 @@ class ScreenCapturer(
 
     fun stopSharing() {
         sharingPaused.value = false
+        video.clear()
         synchronized(watcherLock) {
             watchers.clear()
+            videoViewers.clear()
             sends.values.forEach { it.cancel() }
             sends.clear()
-            viewerCount.value = 0
+            publishViewersLocked()
             job?.cancel()
         }
         framesPerSecond.value = 0
     }
+
+    private fun moveToJpeg(endpoints: List<String>) {
+        synchronized(watcherLock) {
+            endpoints.forEach { endpoint ->
+                if (videoViewers.remove(endpoint)) watchers.add(endpoint)
+            }
+            startLoopLocked()
+            publishViewersLocked()
+        }
+    }
+
+    private fun publishViewersLocked() {
+        viewerCount.value = watchers.size + videoViewers.size
+        streamCodec.value = when {
+            watchers.isEmpty() && videoViewers.isEmpty() -> ""
+            watchers.isEmpty() -> "H.264"
+            videoViewers.isEmpty() -> "JPEG"
+            else -> "H.264 + JPEG"
+        }
+    }
+
+    private fun selectedDisplayIndex(): Int =
+        selectedDisplayId.value.takeLastWhile(Char::isDigit).toIntOrNull() ?: 0
 
     private fun startLoopLocked() {
         if (sharingPaused.value || watchers.isEmpty() || job?.isActive == true) return
@@ -194,7 +254,7 @@ class ScreenCapturer(
                 if (packet != null) {
                     lastError = null
                     captureError.value = null
-                    val delivered = snapshotWatchers().any { endpoint -> offerFrame(endpoint, packet) }
+                    val delivered = snapshotWatchers().count { endpoint -> offerFrame(endpoint, packet) } > 0
                     if (delivered) {
                         framesInWindow++
                         val now = System.nanoTime()
@@ -330,6 +390,23 @@ class ScreenCapturer(
             }
         }
         true
+    }
+
+    /** Counts frames and reports the rate once a second. Runs on the thread that sends them. */
+    private class FrameMeter(
+        private val publish: (Int) -> Unit,
+    ) {
+        private var frames = 0
+        private var windowStarted = System.nanoTime()
+
+        fun count(delivered: Boolean) {
+            if (delivered) frames++
+            val now = System.nanoTime()
+            if (now - windowStarted < 1_000_000_000L) return
+            publish(frames)
+            frames = 0
+            windowStarted = now
+        }
     }
 
     private companion object {

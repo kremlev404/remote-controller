@@ -59,6 +59,7 @@ dependencyResolutionManagement {
 rootProject.name = "remote-controller"
 
 include(":shared")
+include(":host:screencast")
 include(":client:core")
 include(":client:domain")
 include(":client:data")

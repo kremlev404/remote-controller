@@ -15,17 +15,22 @@ import com.remotecontroller.client.domain.usecase.SendKeyCommandUseCase
 import com.remotecontroller.client.domain.usecase.SendPointerCommandUseCase
 import com.remotecontroller.client.domain.usecase.SetScreenTouchModeUseCase
 import com.remotecontroller.shared.network.ScreenFeed
+import com.remotecontroller.shared.network.ScreenFrame
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -34,8 +39,14 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
+data class VideoSize(
+    val width: Int,
+    val height: Int,
+)
+
 data class ScreenUiState(
     val image: ImageBitmap? = null,
+    val video: VideoSize? = null,
     val framesPerSecond: Int = 0,
     val message: String? = "Connecting to the screen…",
     val connectionState: ConnectionState = ConnectionState.Disconnected,
@@ -43,7 +54,10 @@ data class ScreenUiState(
     val pointerScale: Float = 1f,
     val cursorX: Float = 0.5f,
     val cursorY: Float = 0.5f,
-)
+) {
+    val hasPicture: Boolean
+        get() = image != null || video != null
+}
 
 class ScreenViewModel(
     private val observeScreen: ObserveScreenUseCase,
@@ -61,6 +75,17 @@ class ScreenViewModel(
 
     val uiState: StateFlow<ScreenUiState>
         field = MutableStateFlow(ScreenUiState(connectionState = connectionState.value))
+
+    /** Frames bypass the state: drawing happens on the surface, without a recomposition. */
+    private val videoChannel = Channel<ScreenFrame.Video>(capacity = VIDEO_BACKLOG, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val keyframeRequests = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_LATEST,
+    )
+    private val latestPicture = MutableStateFlow<ScreenFrame.Picture?>(null)
+
+    val videoFrames: ReceiveChannel<ScreenFrame.Video>
+        get() = videoChannel
 
     private val pointerEvents = Channel<PointerEvent>(capacity = Channel.UNLIMITED)
     private val pointerJob = SupervisorJob()
@@ -94,6 +119,16 @@ class ScreenViewModel(
         viewModelScope.launch {
             observePointerDpi().collect { dpi ->
                 uiState.update { it.copy(pointerScale = PointerSensitivity.scale(dpi)) }
+            }
+        }
+        viewModelScope.launch {
+            // A StateFlow keeps only the newest, so a slow phone skips JPEG frames, never queues them.
+            latestPicture.filterNotNull().collect { picture ->
+                val image = withContext(Dispatchers.Default) { decodeJpeg(picture.jpeg) } ?: return@collect
+                val fps = noteFrame()
+                uiState.update {
+                    it.copy(image = image, video = null, framesPerSecond = fps, message = null)
+                }
             }
         }
         viewModelScope.launch {
@@ -181,9 +216,18 @@ class ScreenViewModel(
         pointerEvents.trySend(PointerEvent.Key("ENTER"))
     }
 
+    fun videoLost() {
+        keyframeRequests.tryEmit(Unit)
+    }
+
+    fun videoRate(framesPerSecond: Int) {
+        uiState.update { it.copy(framesPerSecond = framesPerSecond) }
+    }
+
     override fun onCleared() {
         releasePointer()
         pointerEvents.close()
+        videoChannel.close()
     }
 
     private suspend fun stream(connection: PcConnection) {
@@ -191,28 +235,22 @@ class ScreenViewModel(
         while (currentCoroutineContext().isActive) {
             try {
                 uiState.update { current ->
-                    if (current.image == null) current.copy(message = "Connecting to the screen…") else current
+                    if (current.hasPicture) current else current.copy(message = "Connecting to the screen…")
                 }
-                observeScreen(connection).collect { feed ->
+                observeScreen(connection, videoCodecs, keyframeRequests).collect { feed ->
                     streak = 0
                     when (feed) {
                         ScreenFeed.HostPaused -> uiState.update {
-                            it.copy(image = null, framesPerSecond = 0, message = "Screen sharing is paused on the PC")
+                            it.copy(
+                                image = null,
+                                video = null,
+                                framesPerSecond = 0,
+                                message = "Screen sharing is paused on the PC",
+                            )
                         }
                         ScreenFeed.HostLive -> uiState.update { it.copy(message = "Connecting to the screen…") }
-                        is ScreenFeed.Picture -> {
-                            val image = withContext(Dispatchers.Default) {
-                                decodeJpeg(feed.picture.jpeg)
-                            } ?: return@collect
-                            val fps = noteFrame()
-                            uiState.update {
-                                it.copy(
-                                    image = image,
-                                    framesPerSecond = fps,
-                                    message = null,
-                                )
-                            }
-                        }
+                        is ScreenFeed.Picture -> latestPicture.value = feed.picture
+                        is ScreenFeed.Video -> showVideo(feed.video)
                     }
                 }
                 streak++
@@ -221,11 +259,19 @@ class ScreenViewModel(
             } catch (error: Throwable) {
                 streak++
                 uiState.update { current ->
-                    if (current.image != null) current
+                    if (current.hasPicture) current
                     else current.copy(message = error.message?.takeIf { it.isNotBlank() } ?: "The screen is unavailable")
                 }
             }
             delay((400L * streak.coerceAtMost(5)).milliseconds)
+        }
+    }
+
+    private fun showVideo(video: ScreenFrame.Video) {
+        videoChannel.trySend(video)
+        val size = VideoSize(video.width, video.height)
+        if (uiState.value.video != size) {
+            uiState.update { it.copy(image = null, video = size, message = null) }
         }
     }
 
@@ -286,3 +332,4 @@ private sealed interface PointerEvent {
 }
 
 private const val LEFT_BUTTON = "LEFT"
+private const val VIDEO_BACKLOG = 16

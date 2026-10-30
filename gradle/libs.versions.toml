@@ -99,4 +99,5 @@ remotecontroller-kmp-library = { id = "remotecontroller.kmp.library" }
 remotecontroller-kmp-compose = { id = "remotecontroller.kmp.compose" }
 remotecontroller-kmp-feature-api = { id = "remotecontroller.kmp.feature.api" }
 remotecontroller-kmp-feature-impl = { id = "remotecontroller.kmp.feature.impl" }
+remotecontroller-jvm-library = { id = "remotecontroller.jvm.library" }
 remotecontroller-android-application = { id = "remotecontroller.android.application" }

@@ -51,6 +51,8 @@ data class DesktopUiState(
     val displays: List<SharedDisplay> = emptyList(),
     val selectedDisplayId: String = "",
     val streamFps: Int = 0,
+    val streamLive: Boolean = false,
+    val streamCodec: String = "",
     val streamViewers: Int = 0,
     val streamPaused: Boolean = false,
     val streamError: String? = null,
@@ -179,6 +181,18 @@ class DesktopViewModel(
         viewModelScope.launch {
             screenCapturer.sharingPaused.collect { paused ->
                 uiState.update { it.copy(streamPaused = paused) }
+            }
+        }
+
+        viewModelScope.launch {
+            screenCapturer.videoLive.collect { live ->
+                uiState.update { it.copy(streamLive = live) }
+            }
+        }
+
+        viewModelScope.launch {
+            screenCapturer.streamCodec.collect { codec ->
+                uiState.update { it.copy(streamCodec = codec) }
             }
         }
 

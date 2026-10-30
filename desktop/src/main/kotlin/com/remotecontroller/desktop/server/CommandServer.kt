@@ -49,6 +49,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.net.BindException
 import java.net.Inet4Address
 import java.net.InetSocketAddress
@@ -472,8 +473,17 @@ class CommandServer(
             log("rejected screen stream from $remote")
             return
         }
-        screenCapturer.watch(endpoint)
-        log("screen stream opened ($remote)")
+        val requests = com.remotecontroller.shared.network.ChunkBuffer(ScreenSignal.MAX_VIEWER_TEXT)
+        // An older app says nothing here, and keeps getting JPEG after this short wait.
+        val hello = withTimeoutOrNull(VIEWER_HELLO_WAIT) { ViewerHello(readViewerText(link, requests)) }
+        if (hello != null && hello.text == null) {
+            SecureFrames.clear(endpoint)
+            log("screen stream ended before it started ($remote)")
+            return
+        }
+        val codecs = hello?.text?.let(ScreenSignal::viewerCodecs).orEmpty()
+        val picked = screenCapturer.watch(endpoint, codecs)
+        log("screen stream opened ($remote, $picked)")
         val signals = scope.launch {
             screenCapturer.sharingPaused.collect { paused ->
                 val text = if (paused) ScreenSignal.PAUSED else ScreenSignal.LIVE
@@ -481,12 +491,9 @@ class CommandServer(
             }
         }
         try {
-            for (frame in link.incoming) {
-                when (frame) {
-                    is Frame.Ping -> runCatching { SocketFrames.sendPong(endpoint, frame.data) }
-                    is Frame.Close -> break
-                    else -> Unit
-                }
+            while (true) {
+                val text = readViewerText(link, requests) ?: break
+                if (ScreenSignal.isKeyframeRequest(text)) screenCapturer.requestKeyframe(endpoint)
             }
         } finally {
             signals.cancel()
@@ -494,6 +501,25 @@ class CommandServer(
             SecureFrames.clear(endpoint)
             log("screen stream closed ($remote)")
         }
+    }
+
+    /** The next sealed text from a viewer. Null when the socket ended or a frame does not open. */
+    private suspend fun readViewerText(
+        link: LinkSocket,
+        buffer: com.remotecontroller.shared.network.ChunkBuffer,
+    ): String? {
+        for (frame in link.incoming) {
+            when (frame) {
+                is Frame.Binary -> {
+                    val box = buffer.push(frame.data, frame.fin) ?: continue
+                    return runCatching { SecureFrames.openText(link.endpoint, box) }.getOrNull()
+                }
+                is Frame.Ping -> runCatching { SocketFrames.sendPong(link.endpoint, frame.data) }
+                is Frame.Close -> return null
+                else -> Unit
+            }
+        }
+        return null
     }
 
     private suspend fun awaitHealthy(): Boolean {
@@ -833,6 +859,11 @@ class CommandServer(
         val bindHost: String? = null,
     )
 
+    /** What came first on a screen socket. A null text means it closed, or sent a frame that does not open. */
+    private class ViewerHello(
+        val text: String?,
+    )
+
     private class BrowserSlot(
         val id: Long,
         val endpoint: String,
@@ -877,6 +908,7 @@ class CommandServer(
         const val FIREWALL_SETTLE_POLLS = 8
         const val FIREWALL_SETTLE_DELAY_MS = 500L
         const val LOOPBACK_HOST = "127.0.0.1"
+        val VIEWER_HELLO_WAIT = 1.seconds
 
         val VIRTUAL_MARKERS = listOf(
             "virtual",

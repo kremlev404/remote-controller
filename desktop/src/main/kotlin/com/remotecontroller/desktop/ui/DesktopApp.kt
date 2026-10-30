@@ -96,6 +96,8 @@ fun DesktopApp(viewModel: DesktopViewModel = koinViewModel()) {
                     displays = uiState.displays,
                     selectedDisplayId = uiState.selectedDisplayId,
                     framesPerSecond = uiState.streamFps,
+                    streamLive = uiState.streamLive,
+                    streamCodec = uiState.streamCodec,
                     viewers = uiState.streamViewers,
                     paused = uiState.streamPaused,
                     streamError = uiState.streamError,
@@ -391,6 +393,8 @@ private fun ServerStatusCard(
     displays: List<SharedDisplay>,
     selectedDisplayId: String,
     framesPerSecond: Int,
+    streamLive: Boolean,
+    streamCodec: String,
     viewers: Int,
     paused: Boolean,
     streamError: String?,
@@ -559,6 +563,8 @@ private fun ServerStatusCard(
                 displays = displays,
                 selectedDisplayId = selectedDisplayId,
                 framesPerSecond = framesPerSecond,
+                live = streamLive,
+                codec = streamCodec,
                 viewers = viewers,
                 paused = paused,
                 errorMessage = streamError,
@@ -914,6 +920,8 @@ private fun ScreenShareRow(
     displays: List<SharedDisplay>,
     selectedDisplayId: String,
     framesPerSecond: Int,
+    live: Boolean,
+    codec: String,
     viewers: Int,
     paused: Boolean,
     errorMessage: String?,
@@ -931,11 +939,11 @@ private fun ScreenShareRow(
         paused && viewers > 0 -> "Stopped · $viewers waiting"
         paused -> "Stopped"
         viewers <= 0 -> "Idle"
-        framesPerSecond <= 0 -> "Starting"
-        viewers == 1 -> "$framesPerSecond fps · 1 viewer"
-        else -> "$framesPerSecond fps · $viewers viewers"
+        framesPerSecond <= 0 && !live -> "Starting"
+        viewers == 1 -> "$framesPerSecond fps · 1 viewer · $codec"
+        else -> "$framesPerSecond fps · $viewers viewers · $codec"
     }
-    val needsAccess = canGrant && (errorMessage != null || (!paused && viewers > 0 && framesPerSecond <= 0))
+    val needsAccess = canGrant && (errorMessage != null || (!paused && viewers > 0 && framesPerSecond <= 0 && !live))
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         Row(

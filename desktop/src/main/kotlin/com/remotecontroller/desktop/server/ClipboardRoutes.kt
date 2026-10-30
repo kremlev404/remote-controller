@@ -3,13 +3,17 @@ package com.remotecontroller.desktop.server
 import com.remotecontroller.shared.model.RemoteCommand
 import com.remotecontroller.shared.network.ChunkBuffer
 import com.remotecontroller.shared.network.RemoteProtocol
+import io.ktor.http.CacheControl
 import io.ktor.server.http.content.staticResources
 import io.ktor.server.routing.Routing
 import io.ktor.server.websocket.webSocketRaw
 import io.ktor.websocket.Frame
 
 internal fun Routing.clipboardRoutes(serve: suspend (LinkSocket) -> Unit) {
-    staticResources(RemoteProtocol.CLIP_PATH, "web")
+    // webApp.js keeps its name between versions: a cached copy next to a new page breaks it.
+    staticResources(RemoteProtocol.CLIP_PATH, "web") {
+        cacheControl { listOf(CacheControl.NoStore(null)) }
+    }
 
     webSocketRaw(RemoteProtocol.CLIP_WS_PATH) {
         serve(linkSocket())

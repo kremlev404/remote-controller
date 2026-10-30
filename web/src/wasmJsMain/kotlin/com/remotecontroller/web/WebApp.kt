@@ -1,5 +1,6 @@
 package com.remotecontroller.web
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -43,8 +44,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -52,6 +53,9 @@ import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Spacer
@@ -240,7 +244,7 @@ private fun LinkedSession(target: PageTarget) {
         val notes by session.notes.collectAsState()
         val banner by session.clipBanner.collectAsState()
         val connected by session.clipConnected.collectAsState()
-        val frame by session.frame.collectAsState()
+        val picture by session.picture.collectAsState()
         val fps by session.framesPerSecond.collectAsState()
         val watching by session.watching.collectAsState()
         val hostPaused by session.hostPaused.collectAsState()
@@ -268,7 +272,8 @@ private fun LinkedSession(target: PageTarget) {
             if (wide) {
                 Row(modifier = Modifier.fillMaxSize()) {
                     StreamPane(
-                        frame = frame,
+                        picture = picture,
+                        onVideoPlaced = session::placeVideo,
                         framesPerSecond = fps,
                         watching = watching,
                         hostPaused = hostPaused,
@@ -306,7 +311,8 @@ private fun LinkedSession(target: PageTarget) {
             } else {
                 Column(modifier = Modifier.fillMaxSize()) {
                     StreamPane(
-                        frame = frame,
+                        picture = picture,
+                        onVideoPlaced = session::placeVideo,
                         framesPerSecond = fps,
                         watching = watching,
                         hostPaused = hostPaused,
@@ -347,7 +353,8 @@ private fun LinkedSession(target: PageTarget) {
 
 @Composable
 private fun StreamPane(
-    frame: ImageBitmap?,
+    picture: ScreenPicture?,
+    onVideoPlaced: (Double, Double, Double, Double) -> Unit,
     framesPerSecond: Int,
     watching: Boolean,
     hostPaused: Boolean,
@@ -368,9 +375,10 @@ private fun StreamPane(
 ) {
     Column(modifier = modifier.background(Color.Black)) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (frame != null) {
+            if (picture != null) {
                 DesktopPicture(
-                    image = frame,
+                    picture = picture,
+                    onVideoPlaced = onVideoPlaced,
                     button = if (rightClick) "RIGHT" else "LEFT",
                     onPointer = onPointer,
                     onScroll = onScroll,
@@ -402,7 +410,7 @@ private fun StreamPane(
                     text = when {
                         !watching -> "Stopped"
                         hostPaused -> "Paused on the computer"
-                        frame == null -> "Screen"
+                        picture == null -> "Screen"
                         else -> "$framesPerSecond fps"
                     },
                     color = Color.White,
@@ -412,12 +420,12 @@ private fun StreamPane(
                 TextButton(onClick = { if (watching) onStop() else onResume() }) {
                     Text(if (watching) "Stop" else "Resume", color = Color.White)
                 }
-                if (frame != null && canGoFullscreen()) {
+                if (picture != null && canGoFullscreen()) {
                     TextButton(onClick = onToggleFullscreen) {
                         Text(if (fullscreen) "Exit full screen" else "Full screen", color = Color.White)
                     }
                 }
-                if (frame != null) {
+                if (picture != null) {
                     FilterChip(
                         selected = rightClick,
                         onClick = onRightClick,
@@ -478,81 +486,106 @@ private fun KeyboardHint(
 
 @Composable
 private fun DesktopPicture(
-    image: ImageBitmap,
+    picture: ScreenPicture,
+    onVideoPlaced: (Double, Double, Double, Double) -> Unit,
     button: String,
     onPointer: (Float, Float, String, String) -> Unit,
     onScroll: (Float, Float, Int) -> Unit,
     onMouseDown: () -> Unit,
 ) {
-    val imageWidth = image.width
-    val imageHeight = image.height
-    Image(
-        bitmap = image,
-        contentDescription = "Desktop screen",
-        contentScale = ContentScale.Fit,
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(imageWidth, imageHeight, button) {
-                awaitEachGesture {
-                    val first = awaitFirstDown(requireUnconsumed = false)
+    val imageWidth = picture.width
+    val imageHeight = picture.height
+    val density = LocalDensity.current.density
+    val input = Modifier
+        .fillMaxSize()
+        .pointerInput(imageWidth, imageHeight, button) {
+            awaitEachGesture {
+                val first = awaitFirstDown(requireUnconsumed = false)
+                val placed = letterbox(
+                    boxWidth = size.width.toFloat(),
+                    boxHeight = size.height.toFloat(),
+                    imageWidth = imageWidth,
+                    imageHeight = imageHeight,
+                )
+                if (!placed.contains(first.position)) {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.changes.none { it.pressed }) break
+                    }
+                    return@awaitEachGesture
+                }
+                if (first.type == PointerType.Mouse) onMouseDown()
+                val buttonName = if (currentEvent.buttons.isSecondaryPressed) "RIGHT" else button
+                var last = placed.normalize(first.position)
+                onPointer(last.x, last.y, RemoteKeys.POINTER_DOWN, buttonName)
+                first.consume()
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val pressed = event.changes.filter { it.pressed }
+                    if (pressed.isEmpty()) {
+                        onPointer(last.x, last.y, RemoteKeys.POINTER_UP, buttonName)
+                        break
+                    }
+                    val current = letterbox(
+                        boxWidth = size.width.toFloat(),
+                        boxHeight = size.height.toFloat(),
+                        imageWidth = imageWidth,
+                        imageHeight = imageHeight,
+                    ).normalize(pressed[0].position)
+                    last = current
+                    onPointer(current.x, current.y, RemoteKeys.POINTER_MOVE, buttonName)
+                    event.changes.forEach { it.consume() }
+                }
+            }
+        }
+        .pointerInput(imageWidth, imageHeight) {
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent()
+                    if (event.type != PointerEventType.Scroll) continue
+                    val change = event.changes.firstOrNull() ?: continue
                     val placed = letterbox(
                         boxWidth = size.width.toFloat(),
                         boxHeight = size.height.toFloat(),
                         imageWidth = imageWidth,
                         imageHeight = imageHeight,
                     )
-                    if (!placed.contains(first.position)) {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            if (event.changes.none { it.pressed }) break
-                        }
-                        return@awaitEachGesture
-                    }
-                    if (first.type == PointerType.Mouse) onMouseDown()
-                    val buttonName = if (currentEvent.buttons.isSecondaryPressed) "RIGHT" else button
-                    var last = placed.normalize(first.position)
-                    onPointer(last.x, last.y, RemoteKeys.POINTER_DOWN, buttonName)
-                    first.consume()
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val pressed = event.changes.filter { it.pressed }
-                        if (pressed.isEmpty()) {
-                            onPointer(last.x, last.y, RemoteKeys.POINTER_UP, buttonName)
-                            break
-                        }
-                        val current = letterbox(
-                            boxWidth = size.width.toFloat(),
-                            boxHeight = size.height.toFloat(),
-                            imageWidth = imageWidth,
-                            imageHeight = imageHeight,
-                        ).normalize(pressed[0].position)
-                        last = current
-                        onPointer(current.x, current.y, RemoteKeys.POINTER_MOVE, buttonName)
-                        event.changes.forEach { it.consume() }
-                    }
+                    if (!placed.contains(change.position)) continue
+                    val point = placed.normalize(change.position)
+                    val steps = change.scrollDelta.y.toInt().coerceIn(-20, 20)
+                    if (steps != 0) onScroll(point.x, point.y, steps)
+                    change.consume()
                 }
             }
-            .pointerInput(imageWidth, imageHeight) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (event.type != PointerEventType.Scroll) continue
-                        val change = event.changes.firstOrNull() ?: continue
-                        val placed = letterbox(
-                            boxWidth = size.width.toFloat(),
-                            boxHeight = size.height.toFloat(),
-                            imageWidth = imageWidth,
-                            imageHeight = imageHeight,
-                        )
-                        if (!placed.contains(change.position)) continue
-                        val point = placed.normalize(change.position)
-                        val steps = change.scrollDelta.y.toInt().coerceIn(-20, 20)
-                        if (steps != 0) onScroll(point.x, point.y, steps)
-                        change.consume()
-                    }
-                }
+        }
+    when (picture) {
+        is ScreenPicture.Still -> Image(
+            bitmap = picture.bitmap,
+            contentDescription = "Desktop screen",
+            contentScale = ContentScale.Fit,
+            modifier = input,
+        )
+        // The video is on a canvas behind the page: this box only clears the way to it.
+        is ScreenPicture.Moving -> Canvas(
+            modifier = input.onGloballyPositioned { box ->
+                val origin = box.positionInWindow()
+                val placed = letterbox(
+                    boxWidth = box.size.width.toFloat(),
+                    boxHeight = box.size.height.toFloat(),
+                    imageWidth = imageWidth,
+                    imageHeight = imageHeight,
+                )
+                onVideoPlaced(
+                    ((origin.x + placed.left) / density).toDouble(),
+                    ((origin.y + placed.top) / density).toDouble(),
+                    (placed.width / density).toDouble(),
+                    (placed.height / density).toDouble(),
+                )
             },
-    )
+        ) {
+            drawRect(color = Color.Transparent, blendMode = BlendMode.Clear)
+        }
+    }
 }
 
 private data class PlacedImage(

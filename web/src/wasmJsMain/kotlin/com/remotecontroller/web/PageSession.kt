@@ -12,6 +12,7 @@ import com.remotecontroller.shared.network.LinkGrant
 import com.remotecontroller.shared.network.RelayProtocol
 import com.remotecontroller.shared.network.RemoteJson
 import com.remotecontroller.shared.network.RemoteProtocol
+import com.remotecontroller.shared.network.ScreenCodec
 import com.remotecontroller.shared.network.ScreenFrame
 import com.remotecontroller.shared.network.ScreenSignal
 import kotlin.io.encoding.Base64
@@ -60,6 +61,22 @@ data class PageTarget(
     }
 }
 
+/** A JPEG the page draws itself, or video the player paints behind the page. */
+sealed interface ScreenPicture {
+    val width: Int
+    val height: Int
+
+    data class Still(val bitmap: ImageBitmap) : ScreenPicture {
+        override val width: Int get() = bitmap.width
+        override val height: Int get() = bitmap.height
+    }
+
+    data class Moving(
+        override val width: Int,
+        override val height: Int,
+    ) : ScreenPicture
+}
+
 sealed interface LinkState {
     data object Connecting : LinkState
     data object Live : LinkState
@@ -83,7 +100,7 @@ class PageSession(
     val clipConnected: StateFlow<Boolean>
         field = MutableStateFlow(false)
 
-    val frame: StateFlow<ImageBitmap?>
+    val picture: StateFlow<ScreenPicture?>
         field = MutableStateFlow(null)
 
     val framesPerSecond: StateFlow<Int>
@@ -109,6 +126,7 @@ class PageSession(
     private var streamSocket: BrowserSocket? = null
     private var clipCipher: LinkCipher? = null
     private var streamCipher: LinkCipher? = null
+    private var player: VideoPlayer? = null
     private var closed = false
     private var halted = false
     private var accessCode = target.code
@@ -166,7 +184,7 @@ class PageSession(
     }
 
     fun captureKeyboard() {
-        if (clipCipher == null || frame.value == null || !watching.value) return
+        if (clipCipher == null || picture.value == null || !watching.value) return
         keyboardCaptured.value = true
         keyboard.engage()
     }
@@ -193,6 +211,11 @@ class PageSession(
     fun resumeStream() {
         watching.value = true
         openStream()
+    }
+
+    /** Where the picture sits on the page, in CSS pixels. */
+    fun placeVideo(left: Double, top: Double, width: Double, height: Double) {
+        player?.place(left, top, width, height)
     }
 
     fun pointer(x: Float, y: Float, phase: String, button: String) {
@@ -242,6 +265,8 @@ class PageSession(
         watching.value = false
         clipSocket?.close()
         streamSocket?.close()
+        player?.close()
+        player = null
         clipSocket = null
         streamSocket = null
         clipCipher = null
@@ -335,6 +360,7 @@ class PageSession(
                 streamSocket = null
                 streamCipher = null
                 framesPerSecond.value = 0
+                player?.reset()
                 if (watching.value && !closed && !halted) {
                     streamMessage.value = "Reconnecting…"
                     scope.launch {
@@ -343,8 +369,22 @@ class PageSession(
                     }
                 }
             },
-            onReady = { cipher -> streamCipher = cipher },
+            onReady = { cipher ->
+                streamCipher = cipher
+                val codecs = if (canPlayVideo()) listOf(ScreenCodec.H264) else emptyList()
+                sendStream(ScreenSignal.viewer(codecs))
+            },
         )
+    }
+
+    private fun sendStream(text: String) {
+        val cipher = streamCipher ?: return
+        val socket = streamSocket ?: return
+        scope.launch {
+            cipher.seal(LinkFrame.pack(LinkFrame.TEXT, text.encodeToByteArray())) { box ->
+                socket.sendBytes(Base64.encode(box))
+            }
+        }
     }
 
     private fun onStreamText(text: String) {
@@ -356,17 +396,35 @@ class PageSession(
             }
             ScreenSignal.isLive(text) -> {
                 hostPaused.value = false
-                if (frame.value == null) streamMessage.value = "Connecting to the screen…"
+                if (picture.value == null) streamMessage.value = "Connecting to the screen…"
             }
         }
     }
 
     private fun onStreamFrame(packet: ByteArray) {
-        val picture = ScreenFrame.unpack(packet) ?: return
+        val video = ScreenFrame.unpackVideo(packet)
+        if (video != null) {
+            videoPlayer().decode(Base64.encode(video.data), video.keyframe)
+            return
+        }
+        val still = ScreenFrame.unpack(packet) ?: return
         val bitmap = runCatching {
-            Image.makeFromEncoded(picture.jpeg).toComposeImageBitmap()
+            Image.makeFromEncoded(still.jpeg).toComposeImageBitmap()
         }.getOrNull() ?: return
-        frame.value = bitmap
+        picture.value = ScreenPicture.Still(bitmap)
+        noteShownFrame()
+    }
+
+    private fun videoPlayer(): VideoPlayer = player ?: openVideoPlayer(
+        onShown = { width, height ->
+            val moving = ScreenPicture.Moving(width, height)
+            if (picture.value != moving) picture.value = moving
+            noteShownFrame()
+        },
+        onLost = { sendStream(ScreenSignal.KEYFRAME) },
+    ).also { player = it }
+
+    private fun noteShownFrame() {
         hostPaused.value = false
         framesInWindow++
         if (windowStart.elapsedNow().inWholeMilliseconds >= 1_000) {

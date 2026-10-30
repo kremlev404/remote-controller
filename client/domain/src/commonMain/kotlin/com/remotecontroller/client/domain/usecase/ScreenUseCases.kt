@@ -10,8 +10,11 @@ import kotlinx.coroutines.flow.Flow
 class ObserveScreenUseCase(
     private val repository: ScreenRepository,
 ) {
-    operator fun invoke(connection: PcConnection): Flow<ScreenFeed> =
-        repository.watch(connection)
+    operator fun invoke(
+        connection: PcConnection,
+        codecs: List<String>,
+        keyframeRequests: Flow<Unit>,
+    ): Flow<ScreenFeed> = repository.watch(connection, codecs, keyframeRequests)
 }
 
 class SendPointerCommandUseCase(

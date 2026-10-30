@@ -26,6 +26,10 @@ gradlePlugin {
             id = "remotecontroller.kmp.feature.impl"
             implementationClass = "com.remotecontroller.buildlogic.KmpFeatureImplConventionPlugin"
         }
+        register("jvmLibrary") {
+            id = "remotecontroller.jvm.library"
+            implementationClass = "com.remotecontroller.buildlogic.JvmLibraryConventionPlugin"
+        }
         register("androidApplication") {
             id = "remotecontroller.android.application"
             implementationClass = "com.remotecontroller.buildlogic.AndroidApplicationConventionPlugin"

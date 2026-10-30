@@ -1,12 +1,15 @@
 package com.remotecontroller.shared.network
 
 /**
- * One screen frame: 10-byte header, then JPEG bytes.
+ * One screen frame: 10-byte header, then the picture.
  * Layout, big-endian: version u8, flags u8, width u16, height u16, sequence u32.
+ * Version 1 carries JPEG bytes. Version 2 carries one H.264 access unit in Annex B form.
  */
 object ScreenFrame {
     const val VERSION: Int = 1
+    const val VIDEO_VERSION: Int = 2
     const val HEADER_SIZE: Int = 10
+    const val FLAG_KEYFRAME: Int = 1
 
     fun pack(width: Int, height: Int, sequence: Int, jpeg: ByteArray): ByteArray {
         val packet = ByteArray(HEADER_SIZE + jpeg.size)
@@ -30,6 +33,40 @@ object ScreenFrame {
         if (jpeg.isEmpty()) return null
         return Picture(width = width, height = height, sequence = sequence, jpeg = jpeg)
     }
+
+    /** A packet with the header filled in and room for [size] bytes of video after it. */
+    fun videoPacket(width: Int, height: Int, sequence: Int, keyframe: Boolean, size: Int): ByteArray {
+        val packet = ByteArray(HEADER_SIZE + size)
+        packet[0] = VIDEO_VERSION.toByte()
+        packet[1] = (if (keyframe) FLAG_KEYFRAME else 0).toByte()
+        putShort(packet, 2, width)
+        putShort(packet, 4, height)
+        putInt(packet, 6, sequence)
+        return packet
+    }
+
+    fun unpackVideo(packet: ByteArray): Video? {
+        if (packet.size <= HEADER_SIZE) return null
+        if ((packet[0].toInt() and 0xFF) != VIDEO_VERSION) return null
+        val width = shortAt(packet, 2)
+        val height = shortAt(packet, 4)
+        if (width !in 1..MAX_EDGE || height !in 1..MAX_EDGE) return null
+        return Video(
+            width = width,
+            height = height,
+            sequence = intAt(packet, 6),
+            keyframe = (packet[1].toInt() and FLAG_KEYFRAME) != 0,
+            data = packet.copyOfRange(HEADER_SIZE, packet.size),
+        )
+    }
+
+    class Video(
+        val width: Int,
+        val height: Int,
+        val sequence: Int,
+        val keyframe: Boolean,
+        val data: ByteArray,
+    )
 
     data class Picture(
         val width: Int,

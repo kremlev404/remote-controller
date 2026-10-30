@@ -41,6 +41,43 @@ A device that got in once, by code or by Allow, gets a grant and is remembered: 
 
 The laptop runs the server. Phones and LAN browsers connect to it directly. A browser outside the LAN goes through a self-hosted **relay**. The laptop dials out to the relay, so the router needs no open port.
 
+## Screen streaming
+
+On Windows the picture is hardware H.264. Nothing heavy runs on the CPU, and the frames stay on the GPU until they are compressed:
+
+| Step | How | Why |
+|---|---|---|
+| Capture | DXGI Desktop Duplication | The compositor hands over a GPU texture, only when the screen changed |
+| Scale, color | D3D11 video processor | Fixed-function GPU block, no shader or CPU pixels |
+| Encode | Hardware Media Foundation transform | One route for NVIDIA, AMD and Intel; no vendor SDK, no FFmpeg to ship |
+| Send | The same `wss` socket and Link v2 as everything else | Works through the relay, adds no new way in |
+| Play | `MediaCodec` to a surface on Android, WebCodecs in the browser | Hardware decode, past the UI toolkit |
+
+`screencast.dll` (`:host:screencast`) does the first three steps. It is 190 KB, has no dependencies outside Windows, and links the C runtime statically.
+
+- **A still screen costs nothing.** Capture sleeps until the compositor reports changed pixels. After motion stops, a few repeats sharpen the picture, then no frames go out at all.
+- **Frames are never dropped after encoding**, because each depends on the last. While a viewer's socket is busy, nothing is captured. If the link stays slow, the bitrate falls by a quarter a second and climbs back slowly. With several viewers, one that falls behind waits for a keyframe, so it does not hold up the others.
+- **Keyframes come on demand**: when a viewer joins or its decoder loses the picture, at most one per viewer per 500 ms.
+- **Viewers pick the codec.** A viewer lists what it can play in its first sealed message. No list, or a PC that cannot encode, means JPEG through AWT Robot, capped at 1280 pixels. That is the path for macOS and Linux PCs, iOS and older apps. The Screen row in the laptop app shows the codec in use, and the server log says why a viewer got JPEG.
+
+| Mode | Frame cap | Long edge | Bitrate |
+|---|---|---|---|
+| Economy | 15 fps | 1280 px | 3 Mbit/s |
+| Balanced | 30 fps | 1920 px | 8 Mbit/s |
+| Performance | 60 fps | 1920 px | 16 Mbit/s |
+
+Measured at 1080p on a Ryzen 5 3600 and RTX 3060, sending to a Nothing Phone (2) over Wi-Fi:
+
+| | Frame rate | CPU (one core) |
+|---|---|---|
+| JPEG, 720p | 19 fps | 61% |
+| H.264 Performance | 60 fps | 17% |
+| H.264, still screen | 0 fps | under 1% |
+
+The stream stays on TCP on purpose. Sunshine and Parsec use their own UDP protocols, which lose less time to packet loss on bad links, but that means a second encrypted transport to secure and a firewall rule, and a browser cannot speak it.
+
+The measurements, the options we compared and the attempts that failed are in [docs/research](docs/research/README.md).
+
 ## Security
 
 Every connection passes three layers:
@@ -62,6 +99,8 @@ Every connection passes three layers:
 - Each direction has its own AES-256-GCM key, and a sequence number goes into the associated data. A replayed, reordered, reflected or altered frame fails to open, and the link drops.
 - Both sides derive the same six-digit check number. The Allow dialog shows it so you can spot a man in the middle.
 - The `/web` page sends `nosniff`, `frame-ancestors 'none'`, `no-referrer`, COOP and Permissions-Policy headers.
+- Video travels sealed like every other frame, so a decoder only ever sees bytes from the paired PC. The codec list and keyframe requests are sealed too. A frame that does not open ends the stream, and keyframe requests are rate-limited, so a viewer cannot keep the GPU busy.
+- `screencast.dll` sits in the app's own folder and loads by full path, never from a temp folder or the search path. Its imports load from System32 only. It builds with Control Flow Guard, CET, ASLR and DEP, and it never parses data from the network: it only produces video.
 
 What is still on you:
 - With the code off, compare the check number before you press Allow.
@@ -147,7 +186,7 @@ Not done yet:
 
 iOS: open `iosApp` in Xcode (builds the `ClientUI` framework from `:client:feature:common`).
 
-`:desktop:processResources` and `:relay:processResources` depend on `:web:wasmJsBrowserDistribution` and copy its output into the `web` resource folder, so both always ship the current page. Packaging needs a full JDK with `jpackage` (set `JAVA_HOME` or `DESKTOP_JDK_HOME`); on macOS also CMake for the volume library.
+`:desktop:processResources` and `:relay:processResources` depend on `:web:wasmJsBrowserDistribution` and copy its output into the `web` resource folder, so both always ship the current page. Packaging needs a full JDK with `jpackage` (set `JAVA_HOME` or `DESKTOP_JDK_HOME`); on macOS also CMake for the volume library. On Windows `screencast.dll` needs Visual Studio 2022 with the C++ workload, which brings CMake; the build finds it by itself. GitHub's Windows runners already have it.
 
 ### CI and releases
 
@@ -237,6 +276,7 @@ Mouse, keyboard and screen sharing go through Java's AWT Robot. They need an **X
 | Module | What it is |
 |---|---|
 | `:desktop` | Laptop app and server (Ktor, TLS, LinkGate, approvals, relay link, input, volume, screen) |
+| `:host:screencast` | Windows capture and hardware H.264: `screencast.dll` (C++) and its Kotlin API |
 | `:web` | Browser client (Kotlin/Wasm), served at `/web` and by the relay |
 | `:relay` | Self-hosted rendezvous relay (Ktor): PC IDs, session pipes |
 | `:android`, `iosApp` | Phone apps |
