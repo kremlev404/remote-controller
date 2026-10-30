@@ -5,6 +5,7 @@ import java.awt.event.KeyEvent
 
 class KeyboardSimulator(
     private val mediaKeys: MediaKeys,
+    private val textTyper: TextTyper,
 ) {
 
     private val robot = Robot().apply { setAutoDelay(30) }
@@ -22,6 +23,38 @@ class KeyboardSimulator(
 
         keyCodes.forEach(robot::keyPress)
         keyCodes.reversed().forEach(robot::keyRelease)
+    }
+
+    fun type(text: String, backspaces: Int) {
+        repeat(backspaces.coerceIn(0, MAX_TYPED)) { pressKey("BACKSPACE") }
+        val run = StringBuilder()
+        text.take(MAX_TYPED).replace("\r\n", "\n").forEach { char ->
+            when (char) {
+                '\n' -> {
+                    flushTyped(run)
+                    pressKey("ENTER")
+                }
+                '\t' -> {
+                    flushTyped(run)
+                    pressKey("TAB")
+                }
+                else -> run.append(char)
+            }
+        }
+        flushTyped(run)
+    }
+
+    private fun flushTyped(run: StringBuilder) {
+        if (run.isEmpty()) return
+        val text = run.toString()
+        run.clear()
+        if (!textTyper.type(text)) text.forEach(::typeWithRobot)
+    }
+
+    private fun typeWithRobot(char: Char) {
+        runCatching {
+            if (char.isUpperCase()) pressCombo(listOf("SHIFT", char.toString())) else pressKey(char.toString())
+        }
     }
 
     private fun resolveKeyCode(keyName: String): Int? =
@@ -72,6 +105,7 @@ class KeyboardSimulator(
     }
 
     private companion object {
-        val MEDIA_KEYS = setOf("PLAY_PAUSE", "NEXT", "PREVIOUS", "STOP", "VOLUME_UP", "VOLUME_DOWN", "VOLUME_MUTE")
+        const val MAX_TYPED = 4_096
+        val MEDIA_KEYS =setOf("PLAY_PAUSE", "NEXT", "PREVIOUS", "STOP", "VOLUME_UP", "VOLUME_DOWN", "VOLUME_MUTE")
     }
 }

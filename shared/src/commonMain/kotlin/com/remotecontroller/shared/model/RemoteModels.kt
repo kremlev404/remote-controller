@@ -58,6 +58,10 @@ sealed interface RemoteCommand {
     data class KeyCombo(val keys: List<String>) : RemoteCommand
 
     @Serializable
+    @SerialName("type_text")
+    data class TypeText(val text: String, val backspaces: Int = 0) : RemoteCommand
+
+    @Serializable
     @SerialName("mouse_move")
     data class MouseMove(val dx: Int, val dy: Int) : RemoteCommand
 
@@ -98,6 +102,7 @@ fun RemoteCommand.describe(): String = when (this) {
     is RemoteCommand.MuteToggle -> "Toggle Mute"
     is RemoteCommand.KeyPress -> "Key: $key"
     is RemoteCommand.KeyCombo -> "Combo: ${keys.joinToString("+")}"
+    is RemoteCommand.TypeText -> "Typed text"
     is RemoteCommand.MouseMove -> "Mouse move ($dx, $dy)"
     is RemoteCommand.MouseClick -> "Mouse ${button.lowercase()} click"
     is RemoteCommand.MouseScroll -> "Mouse scroll $deltaY"

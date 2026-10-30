@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.remotecontroller.desktop.executor.ScreenCapturer
 import com.remotecontroller.desktop.executor.SharedDisplay
+import com.remotecontroller.desktop.platform.InputAccess
 import com.remotecontroller.desktop.server.ApprovalRequest
 import com.remotecontroller.desktop.server.ClipImages
 import com.remotecontroller.desktop.server.ClipboardExchange
@@ -12,6 +13,7 @@ import com.remotecontroller.desktop.server.ConnectionApprovals
 import com.remotecontroller.desktop.server.DesktopSettings
 import com.remotecontroller.desktop.server.RelayLink
 import com.remotecontroller.desktop.server.RelayState
+import com.remotecontroller.desktop.server.ScreenMode
 import com.remotecontroller.desktop.server.ServerLog
 import com.remotecontroller.desktop.server.ServerLogLine
 import com.remotecontroller.desktop.server.SystemClipboard
@@ -52,6 +54,9 @@ data class DesktopUiState(
     val streamViewers: Int = 0,
     val streamPaused: Boolean = false,
     val streamError: String? = null,
+    val screenMode: ScreenMode = ScreenMode.BALANCED,
+    val darkTheme: Boolean? = null,
+    val inputBlocked: Boolean = false,
     val clipNotes: List<ClipNote> = emptyList(),
     val clipBrowsers: Int = 0,
     val shareClipboard: Boolean = false,
@@ -94,6 +99,8 @@ class DesktopViewModel(
             streamFps = screenCapturer.framesPerSecond.value,
             streamViewers = screenCapturer.viewerCount.value,
             streamError = screenCapturer.captureError.value,
+            screenMode = settings.screenMode.value,
+            darkTheme = settings.darkTheme.value,
         )
 
         viewModelScope.launch {
@@ -175,6 +182,26 @@ class DesktopViewModel(
         }
 
         viewModelScope.launch {
+            settings.screenMode.collect { mode ->
+                uiState.update { it.copy(screenMode = mode) }
+            }
+        }
+
+        viewModelScope.launch {
+            settings.darkTheme.collect { dark ->
+                uiState.update { it.copy(darkTheme = dark) }
+            }
+        }
+
+        viewModelScope.launch {
+            while (isActive) {
+                val blocked = InputAccess.blocked
+                uiState.update { it.copy(inputBlocked = blocked) }
+                delay(INPUT_ACCESS_POLL_MS)
+            }
+        }
+
+        viewModelScope.launch {
             combine(
                 settings.requireCode,
                 approvals.pending,
@@ -240,6 +267,18 @@ class DesktopViewModel(
 
     fun selectDisplay(id: String) {
         screenCapturer.selectDisplay(id)
+    }
+
+    fun setScreenMode(mode: ScreenMode) {
+        settings.setScreenMode(mode)
+    }
+
+    fun setDarkTheme(dark: Boolean) {
+        settings.setDarkTheme(dark)
+    }
+
+    fun allowInput() {
+        InputAccess.request()
     }
 
     fun pauseSharing() {
@@ -474,6 +513,7 @@ class DesktopViewModel(
     private companion object {
         val LOG_LIMITS = setOf(1, 5, 10)
         const val CLIP_POLL_MS = 700L
+        const val INPUT_ACCESS_POLL_MS = 2_000L
     }
 }
 

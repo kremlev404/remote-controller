@@ -98,6 +98,9 @@ class SendKeyCommandUseCase(
 
     suspend fun pressCombo(keys: List<String>): Result<Unit> =
         sendRemoteCommand(RemoteCommand.KeyCombo(keys))
+
+    suspend fun type(text: String, backspaces: Int): Result<Unit> =
+        sendRemoteCommand(RemoteCommand.TypeText(text, backspaces))
 }
 
 class SendMouseCommandUseCase(

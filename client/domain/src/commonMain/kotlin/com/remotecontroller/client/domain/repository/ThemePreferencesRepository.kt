@@ -11,4 +11,8 @@ interface ThemePreferencesRepository {
     fun observePointerDpi(): Flow<Int>
 
     suspend fun setPointerDpi(dpi: Int)
+
+    fun observeScreenTouchMode(): Flow<Boolean>
+
+    suspend fun setScreenTouchMode(enabled: Boolean)
 }

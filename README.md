@@ -20,6 +20,10 @@ The laptop is plugged into the TV over HDMI, and you are on the couch. Remote Co
 2. Put the phone on the same Wi-Fi (guest networks that isolate devices will not work), or turn on **Reach from anywhere** (below).
 3. Connect from the phone app or from a browser.
 
+The text row under the mouse pad and on the screen view types on the laptop as you type, in any language. Send on the keyboard presses Enter.
+
+On the phone's screen view a finger works like a laptop touchpad: drag to move, tap to click, double tap and hold to drag, two fingers to right click (tap) or scroll (drag). **Touch** switches to pressing right where you touch.
+
 **Require access code** (on by default) decides how a device gets in:
 
 | Switch | What the device does | What the laptop does |
@@ -223,7 +227,7 @@ Build on the oldest distribution you support, because newer glibc is fine and ol
 | Firewall | with firewalld running (Fedora), the window shows the port command and **Allow again** asks through `pkexec` |
 | App folder | `~/.local/share/remote-controller` |
 
-Mouse, keyboard and screen sharing go through Java's AWT Robot. They need an **X11 session**: on GNOME or KDE with Wayland, choose "Xorg" or "Plasma (X11)" at login.
+Mouse, keyboard and screen sharing go through Java's AWT Robot. They need an **X11 session**: on GNOME or KDE with Wayland, choose "Xorg" or "Plasma (X11)" at login. Install `xdotool` to type more than plain Latin letters from the phone.
 
 ## Modules
 

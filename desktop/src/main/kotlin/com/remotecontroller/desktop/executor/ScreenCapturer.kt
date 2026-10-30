@@ -13,22 +13,26 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import com.remotecontroller.desktop.server.DesktopSettings
 import com.remotecontroller.desktop.server.SecureFrames
+import org.jetbrains.skia.ColorAlphaType
+import org.jetbrains.skia.ColorType
+import org.jetbrains.skia.EncodedImageFormat
+import org.jetbrains.skia.Image
+import org.jetbrains.skia.ImageInfo
 import java.awt.GraphicsEnvironment
 import java.awt.Point
 import java.awt.Rectangle
 import java.awt.Robot
 import java.awt.image.BufferedImage
 import java.awt.image.DataBufferInt
-import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.concurrent.Executors
-import javax.imageio.IIOImage
-import javax.imageio.ImageIO
-import javax.imageio.ImageWriteParam
-import javax.imageio.stream.MemoryCacheImageOutputStream
 import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 
 data class SharedDisplay(
@@ -37,7 +41,9 @@ data class SharedDisplay(
     val primary: Boolean,
 )
 
-class ScreenCapturer {
+class ScreenCapturer(
+    private val settings: DesktopSettings,
+) {
     val displays: StateFlow<List<SharedDisplay>>
         field = MutableStateFlow(emptyList())
 
@@ -72,15 +78,7 @@ class ScreenCapturer {
     private var robot: Robot? = null
     private var scaledImage: BufferedImage? = null
     private var sequence = 0
-    private val jpegBytes = ByteArrayOutputStream(256 * 1024)
-    private val jpegWriter = ImageIO.getImageWritersByFormatName("jpeg").asSequence().firstOrNull()
-        ?: error("JPEG writer is not available")
-    private val jpegParams = jpegWriter.defaultWriteParam.apply {
-        if (canWriteCompressed()) {
-            compressionMode = ImageWriteParam.MODE_EXPLICIT
-            compressionQuality = JPEG_QUALITY
-        }
-    }
+    private var jpegPixels = ByteArray(0)
 
     init {
         runCatching { publishDisplays() }
@@ -177,8 +175,9 @@ class ScreenCapturer {
         try {
             while (currentCoroutineContext().isActive) {
                 if (snapshotWatchers().isEmpty()) break
+                val interval = settings.screenMode.value.frameInterval
                 if (allBusy()) {
-                    delay(FRAME_INTERVAL_MS.milliseconds)
+                    delay(SEND_POLL)
                     continue
                 }
                 val started = System.nanoTime()
@@ -206,9 +205,9 @@ class ScreenCapturer {
                         }
                     }
                 }
-                val spentMs = (System.nanoTime() - started) / 1_000_000
-                val rest = if (packet == null) FRAME_INTERVAL_MS else FRAME_INTERVAL_MS - spentMs
-                if (rest > 0) delay(rest.milliseconds)
+                val spent = (System.nanoTime() - started).nanoseconds
+                val rest = if (packet == null) interval else interval - spent
+                if (rest.isPositive()) delay(rest)
             }
         } finally {
             framesPerSecond.value = 0
@@ -268,17 +267,14 @@ class ScreenCapturer {
     }
 
     private fun encodeJpeg(image: BufferedImage): ByteArray {
-        jpegBytes.reset()
-        val output = MemoryCacheImageOutputStream(jpegBytes)
-        try {
-            jpegWriter.output = output
-            jpegWriter.write(null, IIOImage(image, null, null), jpegParams)
-            output.flush()
-        } finally {
-            output.close()
-            jpegWriter.reset()
+        val pixels = (image.raster.dataBuffer as DataBufferInt).data
+        if (jpegPixels.size != pixels.size * 4) jpegPixels = ByteArray(pixels.size * 4)
+        ByteBuffer.wrap(jpegPixels).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer().put(pixels)
+        val info = ImageInfo(image.width, image.height, ColorType.BGRA_8888, ColorAlphaType.OPAQUE)
+        return Image.makeRaster(info, jpegPixels, image.width * 4).use { picture ->
+            picture.encodeToData(EncodedImageFormat.JPEG, JPEG_QUALITY)?.use { it.bytes }
+                ?: error("JPEG encoding failed")
         }
-        return jpegBytes.toByteArray()
     }
 
     private fun publishDisplays() {
@@ -338,9 +334,9 @@ class ScreenCapturer {
 
     private companion object {
         const val LONG_EDGE = 1280
-        const val FRAME_INTERVAL_MS = 33L
-        const val JPEG_QUALITY = 0.6f
+        const val JPEG_QUALITY = 60
         val DISPLAY_REFRESH = 2.seconds
+        val SEND_POLL = 2.milliseconds
 
         fun scaledSize(width: Int, height: Int): Pair<Int, Int> {
             val longEdge = max(width, height)

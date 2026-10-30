@@ -5,10 +5,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.remotecontroller.client.domain.model.ConnectionState
 import com.remotecontroller.client.domain.model.PcConnection
+import com.remotecontroller.client.domain.model.PointerSensitivity
 import com.remotecontroller.client.domain.usecase.ObserveActiveConnectionUseCase
 import com.remotecontroller.client.domain.usecase.ObserveConnectionStateUseCase
+import com.remotecontroller.client.domain.usecase.ObservePointerDpiUseCase
+import com.remotecontroller.client.domain.usecase.ObserveScreenTouchModeUseCase
 import com.remotecontroller.client.domain.usecase.ObserveScreenUseCase
+import com.remotecontroller.client.domain.usecase.SendKeyCommandUseCase
 import com.remotecontroller.client.domain.usecase.SendPointerCommandUseCase
+import com.remotecontroller.client.domain.usecase.SetScreenTouchModeUseCase
 import com.remotecontroller.shared.network.ScreenFeed
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -34,13 +39,21 @@ data class ScreenUiState(
     val framesPerSecond: Int = 0,
     val message: String? = "Connecting to the screen…",
     val connectionState: ConnectionState = ConnectionState.Disconnected,
+    val touchMode: Boolean = false,
+    val pointerScale: Float = 1f,
+    val cursorX: Float = 0.5f,
+    val cursorY: Float = 0.5f,
 )
 
 class ScreenViewModel(
     private val observeScreen: ObserveScreenUseCase,
     private val sendPointer: SendPointerCommandUseCase,
+    private val sendKey: SendKeyCommandUseCase,
+    private val setScreenTouchMode: SetScreenTouchModeUseCase,
     observeActiveConnection: ObserveActiveConnectionUseCase,
     observeConnectionState: ObserveConnectionStateUseCase,
+    observePointerDpi: ObservePointerDpiUseCase,
+    observeScreenTouchMode: ObserveScreenTouchModeUseCase,
 ) : ViewModel() {
 
     private val connectionState = observeConnectionState()
@@ -71,6 +84,16 @@ class ScreenViewModel(
         viewModelScope.launch {
             connectionState.collect { state ->
                 uiState.update { it.copy(connectionState = state) }
+            }
+        }
+        viewModelScope.launch {
+            observeScreenTouchMode().collect { enabled ->
+                uiState.update { it.copy(touchMode = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            observePointerDpi().collect { dpi ->
+                uiState.update { it.copy(pointerScale = PointerSensitivity.scale(dpi)) }
             }
         }
         viewModelScope.launch {
@@ -113,6 +136,49 @@ class ScreenViewModel(
         if (!holding) return
         holding = false
         pointerEvents.trySend(PointerEvent.Up(lastX, lastY, lastButton))
+    }
+
+    fun setTouchMode(enabled: Boolean) {
+        releasePointer()
+        viewModelScope.launch { setScreenTouchMode(enabled) }
+    }
+
+    /** The trackpad keeps its own cursor: the picture from the PC does not show one. */
+    fun trackpadMove(dx: Float, dy: Float) {
+        val state = uiState.value
+        val x = (state.cursorX + dx).coerceIn(0f, 1f)
+        val y = (state.cursorY + dy).coerceIn(0f, 1f)
+        uiState.update { it.copy(cursorX = x, cursorY = y) }
+        pointerMove(x, y, LEFT_BUTTON)
+    }
+
+    fun trackpadClick(button: String) {
+        val state = uiState.value
+        pointerDown(state.cursorX, state.cursorY, button)
+        pointerUp(state.cursorX, state.cursorY, button)
+    }
+
+    fun trackpadPress() {
+        val state = uiState.value
+        pointerDown(state.cursorX, state.cursorY, LEFT_BUTTON)
+    }
+
+    fun trackpadRelease() {
+        val state = uiState.value
+        pointerUp(state.cursorX, state.cursorY, LEFT_BUTTON)
+    }
+
+    fun trackpadScroll(deltaY: Int) {
+        val state = uiState.value
+        pointerScroll(state.cursorX, state.cursorY, deltaY)
+    }
+
+    fun type(text: String, backspaces: Int) {
+        pointerEvents.trySend(PointerEvent.Type(text, backspaces))
+    }
+
+    fun pressEnter() {
+        pointerEvents.trySend(PointerEvent.Key("ENTER"))
     }
 
     override fun onCleared() {
@@ -201,6 +267,8 @@ class ScreenViewModel(
                 is PointerEvent.Move -> sendPointer.move(event.x, event.y, event.button)
                 is PointerEvent.Up -> sendPointer.up(event.x, event.y, event.button)
                 is PointerEvent.Scroll -> sendPointer.scroll(event.x, event.y, event.deltaY)
+                is PointerEvent.Type -> sendKey.type(event.text, event.backspaces)
+                is PointerEvent.Key -> sendKey.pressKey(event.key)
             }
         } catch (error: CancellationException) {
             if (!currentCoroutineContext().isActive) throw error
@@ -213,4 +281,8 @@ private sealed interface PointerEvent {
     data class Move(val x: Float, val y: Float, val button: String) : PointerEvent
     data class Up(val x: Float, val y: Float, val button: String) : PointerEvent
     data class Scroll(val x: Float, val y: Float, val deltaY: Int) : PointerEvent
+    data class Type(val text: String, val backspaces: Int) : PointerEvent
+    data class Key(val key: String) : PointerEvent
 }
+
+private const val LEFT_BUTTON = "LEFT"

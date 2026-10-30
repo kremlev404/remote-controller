@@ -6,6 +6,8 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -27,8 +29,9 @@ private val LightColors = lightColorScheme(
     onSurface = Color(0xFF141416),
     surfaceVariant = Color(0xFFECECEE),
     onSurfaceVariant = Color(0xFF5E5E66),
-    outline = Color(0xFFE2E2E6),
-    outlineVariant = Color(0xFFE2E2E6),
+    surfaceContainerHighest = Color(0xFFF4F4F5),
+    outline = Color(0xFFA1A1AA),
+    outlineVariant = Color(0xFFD4D4D8),
     error = Color(0xFFBA1A1A),
     onError = Color.White,
     errorContainer = Color(0xFFFDECEC),
@@ -68,22 +71,26 @@ private val AppTypography = Typography(
     labelMedium = TextStyle(fontWeight = FontWeight.Medium, fontSize = 12.sp, lineHeight = 16.sp),
 )
 
+private val LocalDarkTheme = staticCompositionLocalOf { false }
+
 @Composable
 fun DesktopTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
-        typography = AppTypography,
-        content = content,
-    )
+    CompositionLocalProvider(LocalDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkColors else LightColors,
+            typography = AppTypography,
+            content = content,
+        )
+    }
 }
 
 @Composable
 fun statusOkColor(): Color =
-    if (isSystemInDarkTheme()) Color(0xFF81C784) else Color(0xFF2E7D32)
+    if (LocalDarkTheme.current) Color(0xFF81C784) else Color(0xFF2E7D32)
 
 @Composable
 fun statusPendingColor(): Color =
-    if (isSystemInDarkTheme()) Color(0xFFFFD54F) else Color(0xFFF9A825)
+    if (LocalDarkTheme.current) Color(0xFFFFD54F) else Color(0xFFF9A825)

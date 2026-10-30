@@ -23,7 +23,8 @@ actual fun platformDataModule(): Module = module {
             val context = androidContext()
             val configured = sequenceOf(
                 Settings.Global.getString(context.contentResolver, Settings.Global.DEVICE_NAME),
-                Settings.Secure.getString(context.contentResolver, "bluetooth_name"),
+                // Android throws here for apps that target above API 31.
+                runCatching { Settings.Secure.getString(context.contentResolver, "bluetooth_name") }.getOrNull(),
             ).firstOrNull { !it.isNullOrBlank() }?.trim()
             if (!configured.isNullOrBlank()) {
                 configured

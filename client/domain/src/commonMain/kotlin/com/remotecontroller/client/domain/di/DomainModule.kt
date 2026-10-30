@@ -19,9 +19,11 @@ import com.remotecontroller.client.domain.usecase.SendMouseCommandUseCase
 import com.remotecontroller.client.domain.usecase.SendPointerCommandUseCase
 import com.remotecontroller.client.domain.usecase.SendRemoteCommandUseCase
 import com.remotecontroller.client.domain.usecase.ObservePointerDpiUseCase
+import com.remotecontroller.client.domain.usecase.ObserveScreenTouchModeUseCase
 import com.remotecontroller.client.domain.usecase.ObserveThemeModeUseCase
 import com.remotecontroller.client.domain.usecase.SendVolumeCommandUseCase
 import com.remotecontroller.client.domain.usecase.SetPointerDpiUseCase
+import com.remotecontroller.client.domain.usecase.SetScreenTouchModeUseCase
 import com.remotecontroller.client.domain.usecase.SetThemeModeUseCase
 import org.koin.dsl.module
 
@@ -49,4 +51,6 @@ val domainModule = module {
     factory { SetThemeModeUseCase(get()) }
     factory { ObservePointerDpiUseCase(get()) }
     factory { SetPointerDpiUseCase(get()) }
+    factory { ObserveScreenTouchModeUseCase(get()) }
+    factory { SetScreenTouchModeUseCase(get()) }
 }

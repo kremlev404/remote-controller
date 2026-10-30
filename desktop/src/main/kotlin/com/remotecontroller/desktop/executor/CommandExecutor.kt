@@ -19,6 +19,7 @@ class CommandExecutor(
             is RemoteCommand.MuteToggle -> volumeController.toggleMute()
             is RemoteCommand.KeyPress -> keyboardSimulator.pressKey(command.key)
             is RemoteCommand.KeyCombo -> keyboardSimulator.pressCombo(command.keys)
+            is RemoteCommand.TypeText -> applyTyping(command)
             is RemoteCommand.MouseMove -> mouseSimulator.moveRelative(command.dx, command.dy)
             is RemoteCommand.MouseClick -> mouseSimulator.click(command.button)
             is RemoteCommand.MouseScroll -> mouseSimulator.scroll(command.deltaY)
@@ -45,6 +46,12 @@ class CommandExecutor(
             true
         }
         else -> false
+    }
+
+    fun applyTyping(command: RemoteCommand): Boolean {
+        if (command !is RemoteCommand.TypeText) return false
+        keyboardSimulator.type(command.text, command.backspaces)
+        return true
     }
 
     fun releasePointer() {

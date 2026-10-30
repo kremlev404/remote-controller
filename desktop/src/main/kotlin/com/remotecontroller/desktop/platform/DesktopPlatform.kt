@@ -2,12 +2,16 @@ package com.remotecontroller.desktop.platform
 
 import com.remotecontroller.desktop.executor.KeyboardSimulator
 import com.remotecontroller.desktop.executor.LinuxMediaKeys
+import com.remotecontroller.desktop.executor.LinuxTextTyper
 import com.remotecontroller.desktop.executor.LinuxVolumeController
 import com.remotecontroller.desktop.executor.MacMediaKeys
+import com.remotecontroller.desktop.executor.MacTextTyper
 import com.remotecontroller.desktop.executor.MacVolumeController
 import com.remotecontroller.desktop.executor.MediaKeys
+import com.remotecontroller.desktop.executor.TextTyper
 import com.remotecontroller.desktop.executor.VolumeController
 import com.remotecontroller.desktop.executor.WindowsMediaKeys
+import com.remotecontroller.desktop.executor.WindowsTextTyper
 import com.remotecontroller.desktop.executor.WindowsVolumeController
 import com.remotecontroller.desktop.server.IncomingFirewall
 import com.remotecontroller.desktop.server.LinuxFirewall
@@ -57,7 +61,14 @@ object DesktopPlatform {
         DesktopOs.Mac, DesktopOs.Other -> MacMediaKeys
     }
 
-    fun keyboardSimulator(volume: VolumeController): KeyboardSimulator = KeyboardSimulator(mediaKeys(volume))
+    fun textTyper(): TextTyper = when (os) {
+        DesktopOs.Windows -> WindowsTextTyper
+        DesktopOs.Linux -> LinuxTextTyper
+        DesktopOs.Mac, DesktopOs.Other -> MacTextTyper
+    }
+
+    fun keyboardSimulator(volume: VolumeController): KeyboardSimulator =
+        KeyboardSimulator(mediaKeys(volume), textTyper())
 
     fun machineName(): String = when (os) {
         DesktopOs.Windows -> getenv("COMPUTERNAME") ?: "Windows PC"

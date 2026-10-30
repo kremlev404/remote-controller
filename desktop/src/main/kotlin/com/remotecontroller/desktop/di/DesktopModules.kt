@@ -22,7 +22,7 @@ private val executorModule = module {
     single<VolumeController> { DesktopPlatform.volumeController() }
     single { DesktopPlatform.keyboardSimulator(get()) }
     single { MouseSimulator() }
-    single { ScreenCapturer() }
+    single { ScreenCapturer(get()) }
     single { CommandExecutor(get(), get(), get(), get()) }
 }
 

@@ -4,6 +4,21 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.io.File
 import java.util.prefs.Preferences
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+
+/** Frame rate cap of the screen stream. All viewers share one capture loop, so they share the mode. */
+enum class ScreenMode(val label: String, val framesPerSecond: Int) {
+    ECONOMY("Economy", 15),
+    BALANCED("Balanced", 30),
+    PERFORMANCE("Performance", 60);
+
+    val frameInterval: Duration = 1.seconds / framesPerSecond
+
+    companion object {
+        fun fromStored(value: String?): ScreenMode = entries.firstOrNull { it.name == value } ?: BALANCED
+    }
+}
 
 /** Settings that survive a restart. Stored in the user's Java preferences. */
 class DesktopSettings {
@@ -17,6 +32,13 @@ class DesktopSettings {
 
     val relayUrl: StateFlow<String>
         field = MutableStateFlow(prefs.get(KEY_RELAY_URL, DEFAULT_RELAY_URL))
+
+    val screenMode: StateFlow<ScreenMode>
+        field = MutableStateFlow(ScreenMode.fromStored(prefs.get(KEY_SCREEN_MODE, null)))
+
+    /** Null until the user picks one: the window then follows the system. */
+    val darkTheme: StateFlow<Boolean?>
+        field = MutableStateFlow(prefs.get(KEY_DARK_THEME, null)?.toBooleanStrictOrNull())
 
     fun setRequireCode(enabled: Boolean) {
         prefs.putBoolean(KEY_REQUIRE_CODE, enabled)
@@ -34,10 +56,22 @@ class DesktopSettings {
         relayUrl.value = cleaned
     }
 
+    fun setScreenMode(mode: ScreenMode) {
+        prefs.put(KEY_SCREEN_MODE, mode.name)
+        screenMode.value = mode
+    }
+
+    fun setDarkTheme(dark: Boolean) {
+        prefs.putBoolean(KEY_DARK_THEME, dark)
+        darkTheme.value = dark
+    }
+
     private companion object {
         const val KEY_REQUIRE_CODE = "requireCode"
         const val KEY_RELAY_ENABLED = "relayEnabled"
         const val KEY_RELAY_URL = "relayUrl"
+        const val KEY_SCREEN_MODE = "screenMode"
+        const val KEY_DARK_THEME = "darkTheme"
         const val DEFAULT_RELAY_URL = ""
     }
 }

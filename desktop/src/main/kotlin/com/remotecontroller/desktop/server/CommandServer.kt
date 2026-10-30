@@ -595,6 +595,18 @@ class CommandServer(
         return published
     }
 
+    private fun RemoteCommand.isInput(): Boolean = when (this) {
+        is RemoteCommand.Pointer,
+        is RemoteCommand.PointerScroll,
+        is RemoteCommand.MouseMove,
+        is RemoteCommand.MouseClick,
+        is RemoteCommand.MouseScroll,
+        is RemoteCommand.KeyPress,
+        is RemoteCommand.TypeText,
+        -> true
+        else -> false
+    }
+
     private suspend fun handleCommand(slot: ClientSlot, text: String) {
         val command = RemoteJson.decode<RemoteCommand>(text)
         if (command is RemoteCommand.Hello) {
@@ -605,7 +617,12 @@ class CommandServer(
             return
         }
 
-        if (commandExecutor.applyPointer(command)) return
+        if (!slot.inputLogged && command.isInput()) {
+            slot.inputLogged = true
+            log("input is arriving from ${slot.name}")
+        }
+
+        if (commandExecutor.applyPointer(command) || commandExecutor.applyTyping(command)) return
 
         val newStatus = commandExecutor.execute(command).copy(connectedClients = clientCount())
         volumeSnapshot = VolumeSnapshot(newStatus.volumeLevel, newStatus.isMuted)
@@ -820,6 +837,7 @@ class CommandServer(
     ) {
         @Volatile
         var closedFromDesktop: Boolean = false
+        var inputLogged: Boolean = false
         private val sendLock = Mutex()
 
         suspend fun sendMessage(message: ServerMessage) {

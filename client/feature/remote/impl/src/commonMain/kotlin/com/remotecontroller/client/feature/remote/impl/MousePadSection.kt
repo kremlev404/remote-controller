@@ -33,6 +33,7 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.remotecontroller.client.core.TypingRow
 import com.remotecontroller.shared.model.RemoteKeys
 import kotlin.math.roundToInt
 
@@ -46,6 +47,7 @@ fun MousePadSection(
     onClick: (button: String) -> Unit,
     onPress: (button: String) -> Unit,
     onScroll: (deltaY: Int) -> Unit,
+    onType: (text: String, backspaces: Int) -> Unit,
 ) {
     Column(
         modifier = modifier,
@@ -63,6 +65,11 @@ fun MousePadSection(
         ScrollStrip(
             onScroll = onScroll,
             modifier = Modifier.fillMaxWidth(),
+        )
+
+        TypingRow(
+            onType = onType,
+            onEnter = { onPress("ENTER") },
         )
 
         ActionRow(buttons = RemoteKeys.MOUSE_BUTTONS, onPress = onClick)

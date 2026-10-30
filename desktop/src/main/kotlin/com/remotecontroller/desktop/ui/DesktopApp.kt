@@ -2,6 +2,7 @@ package com.remotecontroller.desktop.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -46,25 +48,29 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.remotecontroller.desktop.executor.SharedDisplay
 import com.remotecontroller.desktop.server.ApprovalRequest
 import com.remotecontroller.desktop.server.ConnectedClient
 import com.remotecontroller.desktop.server.RelayState
 import com.remotecontroller.shared.network.RelayProtocol
 import com.remotecontroller.desktop.AppVersion
+import com.remotecontroller.desktop.server.ScreenMode
 import com.remotecontroller.desktop.server.ServerLogLine
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun DesktopApp(viewModel: DesktopViewModel = koinViewModel()) {
     val uiState by viewModel.uiState.collectAsState()
+    val darkTheme = uiState.darkTheme ?: isSystemInDarkTheme()
 
-    DesktopTheme {
+    DesktopTheme(darkTheme = darkTheme) {
         Surface(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
@@ -73,7 +79,11 @@ fun DesktopApp(viewModel: DesktopViewModel = koinViewModel()) {
                     .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                HeaderSection(server = uiState.server)
+                HeaderSection(
+                    server = uiState.server,
+                    darkTheme = darkTheme,
+                    onDarkThemeChange = viewModel::setDarkTheme,
+                )
 
                 ServerStatusCard(
                     server = uiState.server,
@@ -87,7 +97,11 @@ fun DesktopApp(viewModel: DesktopViewModel = koinViewModel()) {
                     viewers = uiState.streamViewers,
                     paused = uiState.streamPaused,
                     streamError = uiState.streamError,
+                    screenMode = uiState.screenMode,
+                    inputBlocked = uiState.inputBlocked,
+                    onAllowInput = viewModel::allowInput,
                     onSelectDisplay = viewModel::selectDisplay,
+                    onSelectScreenMode = viewModel::setScreenMode,
                     onStartSharing = viewModel::resumeSharing,
                     onStopSharing = viewModel::pauseSharing,
                     onRestartSharing = viewModel::restartSharing,
@@ -311,8 +325,13 @@ private fun RelayCard(
 }
 
 @Composable
-private fun HeaderSection(server: DesktopServerState) {
+private fun HeaderSection(
+    server: DesktopServerState,
+    darkTheme: Boolean,
+    onDarkThemeChange: (Boolean) -> Unit,
+) {
     Row(
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -322,17 +341,38 @@ private fun HeaderSection(server: DesktopServerState) {
             modifier = Modifier.size(40.dp),
             tint = MaterialTheme.colorScheme.primary,
         )
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = "${AppVersion.NAME} ${AppVersion.VERSION}",
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.titleLarge,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
+                maxLines = 1,
             )
             Text(
                 text = server.headline,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        Box(
+            modifier = Modifier.size(width = 40.dp, height = 24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                Switch(
+                    checked = darkTheme,
+                    onCheckedChange = onDarkThemeChange,
+                    modifier = Modifier.scale(0.75f),
+                    thumbContent = {
+                        Icon(
+                            imageVector = if (darkTheme) DesktopIcons.DarkMode else DesktopIcons.LightMode,
+                            contentDescription = if (darkTheme) "Dark theme" else "Light theme",
+                            modifier = Modifier.size(SwitchDefaults.IconSize),
+                        )
+                    },
+                )
+            }
         }
     }
 }
@@ -350,7 +390,11 @@ private fun ServerStatusCard(
     viewers: Int,
     paused: Boolean,
     streamError: String?,
+    screenMode: ScreenMode,
+    inputBlocked: Boolean,
+    onAllowInput: () -> Unit,
     onSelectDisplay: (String) -> Unit,
+    onSelectScreenMode: (ScreenMode) -> Unit,
     onStartSharing: () -> Unit,
     onStopSharing: () -> Unit,
     onRestartSharing: () -> Unit,
@@ -394,6 +438,21 @@ private fun ServerStatusCard(
                 color = server.networkColor(),
                 icon = if (server.networkAvailable) DesktopIcons.Wifi else DesktopIcons.WifiOff,
             )
+            if (inputBlocked) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "macOS is blocking the mouse and keyboard. Turn this app on under Accessibility.",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    TextButton(onClick = onAllowInput) { Text("Allow") }
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -480,7 +539,9 @@ private fun ServerStatusCard(
                 viewers = viewers,
                 paused = paused,
                 errorMessage = streamError,
+                mode = screenMode,
                 onSelect = onSelectDisplay,
+                onSelectMode = onSelectScreenMode,
                 onStart = onStartSharing,
                 onStop = onStopSharing,
                 onRestart = onRestartSharing,
@@ -833,7 +894,9 @@ private fun ScreenShareRow(
     viewers: Int,
     paused: Boolean,
     errorMessage: String?,
+    mode: ScreenMode,
     onSelect: (String) -> Unit,
+    onSelectMode: (ScreenMode) -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onRestart: () -> Unit,
@@ -885,6 +948,18 @@ private fun ScreenShareRow(
             OutlinedButton(onClick = onRestart) { Text("Restart") }
             if (needsAccess) {
                 TextButton(onClick = onGrant) { Text("Allow access") }
+            }
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ScreenMode.entries.forEach { option ->
+                FilterChip(
+                    selected = option == mode,
+                    onClick = { onSelectMode(option) },
+                    label = { Text("${option.label} · ${option.framesPerSecond} fps") },
+                )
             }
         }
         if (displays.size > 1) {

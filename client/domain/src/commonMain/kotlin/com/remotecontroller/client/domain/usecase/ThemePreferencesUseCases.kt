@@ -31,3 +31,17 @@ class SetPointerDpiUseCase(
         repository.setPointerDpi(dpi)
     }
 }
+
+class ObserveScreenTouchModeUseCase(
+    private val repository: ThemePreferencesRepository,
+) {
+    operator fun invoke(): Flow<Boolean> = repository.observeScreenTouchMode()
+}
+
+class SetScreenTouchModeUseCase(
+    private val repository: ThemePreferencesRepository,
+) {
+    suspend operator fun invoke(enabled: Boolean) {
+        repository.setScreenTouchMode(enabled)
+    }
+}

@@ -19,4 +19,10 @@ class ThemePreferencesRepositoryImpl(
     override suspend fun setPointerDpi(dpi: Int) {
         store.setPointerDpi(dpi)
     }
+
+    override fun observeScreenTouchMode(): Flow<Boolean> = store.screenTouchMode
+
+    override suspend fun setScreenTouchMode(enabled: Boolean) {
+        store.setScreenTouchMode(enabled)
+    }
 }

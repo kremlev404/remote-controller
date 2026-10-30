@@ -102,6 +102,8 @@ class RemoteViewModel(
 
     fun pressKey(key: String) = runCommand { sendKeyCommandUseCase.pressKey(key) }
 
+    fun type(text: String, backspaces: Int) = runCommand { sendKeyCommandUseCase.type(text, backspaces) }
+
     fun mouseMove(dx: Int, dy: Int) {
         if (dx == 0 && dy == 0) return
         runCommand { sendMouseCommandUseCase.move(dx, dy) }

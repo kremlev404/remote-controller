@@ -2,6 +2,7 @@ package com.remotecontroller.client.storage.local
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -21,6 +22,10 @@ class ThemePreferencesStore(
         PointerSensitivity.coerce(preferences[POINTER_DPI_KEY] ?: PointerSensitivity.DEFAULT_DPI)
     }
 
+    val screenTouchMode: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[SCREEN_TOUCH_MODE_KEY] ?: false
+    }
+
     suspend fun set(mode: ThemeMode) {
         dataStore.edit { preferences ->
             preferences[MODE_KEY] = mode.stored
@@ -33,8 +38,15 @@ class ThemePreferencesStore(
         }
     }
 
+    suspend fun setScreenTouchMode(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[SCREEN_TOUCH_MODE_KEY] = enabled
+        }
+    }
+
     private companion object {
         val MODE_KEY = stringPreferencesKey("theme_mode")
         val POINTER_DPI_KEY = intPreferencesKey("pointer_dpi")
+        val SCREEN_TOUCH_MODE_KEY = booleanPreferencesKey("screen_touch_mode")
     }
 }

@@ -18,6 +18,7 @@ import androidx.compose.ui.window.rememberWindowState
 import com.remotecontroller.desktop.di.desktopAppModule
 import com.remotecontroller.desktop.platform.applySystemTitleBar
 import com.remotecontroller.desktop.server.ConnectionApprovals
+import com.remotecontroller.desktop.server.DesktopSettings
 import com.remotecontroller.desktop.server.ServerLifecycle
 import com.remotecontroller.desktop.ui.DesktopApp
 import com.remotecontroller.desktop.ui.RemoteServerAppIcon
@@ -37,10 +38,12 @@ fun main() {
     })
 
     val approvals = GlobalContext.get().get<ConnectionApprovals>()
+    val settings = GlobalContext.get().get<DesktopSettings>()
 
     application {
         var windowVisible by remember { mutableStateOf(true) }
         val pending by approvals.pending.collectAsState()
+        val darkTheme by settings.darkTheme.collectAsState()
         // A device is waiting for Allow: show the window even if it sits in the tray.
         LaunchedEffect(pending.size) {
             if (pending.isNotEmpty()) windowVisible = true
@@ -49,6 +52,7 @@ fun main() {
         ApplicationContent(
             windowVisible = windowVisible,
             approvalsWaiting = pending.size,
+            chosenDarkTheme = darkTheme,
             onHideWindow = { windowVisible = false },
             onExitApplication = {
                 serverLifecycle.shutdown()
@@ -64,6 +68,7 @@ fun main() {
 private fun ApplicationScope.ApplicationContent(
     windowVisible: Boolean,
     approvalsWaiting: Int,
+    chosenDarkTheme: Boolean?,
     onHideWindow: () -> Unit,
     onExitApplication: () -> Unit,
     onShowWindow: () -> Unit,
@@ -77,7 +82,7 @@ private fun ApplicationScope.ApplicationContent(
             icon = appIcon,
             state = rememberWindowState(width = 480.dp, height = 916.dp),
         ) {
-            val darkTheme = isSystemInDarkTheme()
+            val darkTheme = chosenDarkTheme ?: isSystemInDarkTheme()
             LaunchedEffect(darkTheme) {
                 window.applySystemTitleBar(darkTheme)
             }
