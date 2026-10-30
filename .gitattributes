@@ -1,0 +1,5 @@
+# Kotlin/Wasm compares this lock file byte for byte with the one it generates (LF).
+# Git on Windows would check it out with CRLF and fail the build there.
+kotlin-js-store/** text eol=lf
+# Shell scripts must keep LF to run on Linux and macOS, wherever they were checked out.
+*.sh text eol=lf

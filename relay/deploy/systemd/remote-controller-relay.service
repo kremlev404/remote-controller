@@ -1,0 +1,35 @@
+[Unit]
+Description=Remote Controller relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Defaults; /etc/remote-controller-relay.env sets RELAY_ORIGIN and may override these.
+Environment=HOST=127.0.0.1
+Environment=PORT=8080
+Environment=RELAY_TRUST_PROXY=true
+Environment="JAVA_OPTS=-XX:MaxRAMPercentage=50 -XX:+ExitOnOutOfMemoryError"
+EnvironmentFile=/etc/remote-controller-relay.env
+ExecStart=/opt/remote-controller-relay/bin/relay
+Restart=always
+RestartSec=3
+
+# Runs as a throwaway user with no write access anywhere.
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+MemoryMax=768M
+
+[Install]
+WantedBy=multi-user.target

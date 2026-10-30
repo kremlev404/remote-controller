@@ -1,0 +1,246 @@
+name: CI
+
+# One workflow, no tags:
+#   pull request to main, push to main  → Lint
+#   then, in the same pull request run  → "Release approval" waits for a manual click
+#                                         (environment "release" with required reviewers)
+#   approved, or "Run workflow" here    → desktop apps (Windows x64 .zip, macOS arm64 .dmg, Linux x64 .tar.xz),
+#                                         signed APK,
+#                                         then one job publishes the GitHub release v<version>
+# The version comes from version.properties. Releasing the same version twice fails: bump it first.
+#
+# One-time setup (Settings):
+#   Environments → New environment "release" → Required reviewers: you.
+#   Secrets and variables → Actions: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+#   ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD (scripts/local/make-android-signing.sh makes them).
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # A pull request is released from its head commit, not from GitHub's temporary merge commit.
+  RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+      - uses: actions/setup-java@v5
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: gradle
+      - run: chmod +x gradlew && ./gradlew lint
+
+  # The manual step of a pull request run. GitHub shows "Review deployments" on the run;
+  # nothing below starts until someone approves it. Ignoring it changes nothing.
+  release-approval:
+    name: Release approval
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: lint
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      # Without required reviewers this job would start on its own and release every pull request.
+      - name: Check that "release" needs an approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rules="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/environments/release")"
+          if ! echo "$rules" | jq -e '[.protection_rules[]?.type] | index("required_reviewers")' >/dev/null; then
+            echo "::error::Environment \"release\" has no required reviewers, so nothing was released." \
+              "Add yourself under Settings → Environments → release, or release with Run workflow."
+            exit 1
+          fi
+
+  # Packaging starts after an approval, or straight away for "Run workflow" on a branch.
+  version:
+    name: Version
+    needs: [ lint, release-approval ]
+    if: >-
+      always() && needs.lint.result == 'success' &&
+      (needs.release-approval.result == 'success' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+      - id: read
+        name: Read version.properties
+        run: |
+          version="$(sed -n 's/^version=//p' version.properties | tr -d '[:space:]')"
+          if [ -z "$version" ]; then
+            echo "::error::No version= in version.properties"
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
+            echo "::error::v$version is already released. Bump version (and versionCode) in version.properties."
+            exit 1
+          fi
+          echo "Releasing v$version from $RELEASE_SHA"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  windows:
+    name: Desktop · Windows x64
+    needs: version
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+      - uses: actions/setup-java@v5
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: gradle
+
+      - name: Build the portable app (.zip)
+        run: ./gradlew.bat :desktop:packageDesktop --no-daemon --stacktrace
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: release-windows
+          path: artifacts/desktop/*.zip
+          if-no-files-found: error
+
+  macos:
+    name: Desktop · macOS arm64
+    needs: version
+    # Apple Silicon only. jpackage builds for the CPU it runs on.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+      - uses: actions/setup-java@v5
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: gradle
+
+      # Also builds libmacvolume with CMake (preinstalled on GitHub's Macs) against the JDK's jni.h.
+      - name: Build the .dmg
+        run: chmod +x gradlew && ./gradlew :desktop:packageDesktop --no-daemon --stacktrace
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: release-macos
+          path: artifacts/desktop/*.dmg
+          if-no-files-found: error
+
+  linux:
+    name: Desktop · Linux x64
+    needs: version
+    # x64 only. Built on the oldest LTS: the app runs on its glibc and newer (Ubuntu 22.04+, Kali, Arch).
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+      - uses: actions/setup-java@v5
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: gradle
+
+      - name: Build the portable app (.tar.xz)
+        run: chmod +x gradlew && ./scripts/build-linux.sh --stacktrace
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: release-linux
+          path: artifacts/desktop/*.tar.xz
+          if-no-files-found: error
+
+  android:
+    name: Android · release APK
+    needs: version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+      - uses: actions/setup-java@v5
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: gradle
+
+      - name: Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "Set the ANDROID_KEYSTORE_BASE64 secret (see the top of this file): a release APK must be signed." >&2
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Build
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: chmod +x gradlew && ./gradlew :android:assembleRelease --no-daemon
+
+      - name: Check the signature and name the file
+        run: |
+          apk="$(find android/build/outputs/apk/release -name '*.apk' | head -n 1)"
+          apksigner="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)"
+          "$apksigner" verify --print-certs "$apk"
+          mkdir -p out
+          cp "$apk" "out/remote-controller-${{ needs.version.outputs.version }}.apk"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: release-android
+          path: out/
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    needs: [ version, windows, macos, linux, android ]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: release
+        run: |
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      # Creates the tag v<version> on the released commit; nobody has to push a tag.
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          target_commitish: ${{ env.RELEASE_SHA }}
+          name: Remote Controller ${{ needs.version.outputs.version }}
+          make_latest: true
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: release/*

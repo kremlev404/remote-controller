@@ -1,0 +1,49 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Phone body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M39,26h30c3.3,0 6,2.7 6,6v44c0,3.3 -2.7,6 -6,6H39c-3.3,0 -6,-2.7 -6,-6V32c0,-3.3 2.7,-6 6,-6z" />
+
+    <!-- Screen -->
+    <path
+        android:fillColor="#2E7D32"
+        android:pathData="M42,32h24v38H42z" />
+
+    <!-- Touch pad -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,51m-9,0a9,9 0,1,1 18,0a9,9 0,1,1 -18,0" />
+    <path
+        android:fillColor="#2E7D32"
+        android:pathData="M54,51m-3,0a3,3 0,1,1 6,0a3,3 0,1,1 -6,0" />
+
+    <!-- Wi‑Fi link -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M72,36 Q78,42 72,48"
+        android:strokeWidth="3"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M76,32 Q85,42 76,52"
+        android:strokeWidth="3"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M80,28 Q92,42 80,56"
+        android:strokeWidth="3"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+
+    <!-- Remote signal dot -->
+    <path
+        android:fillColor="#A5D6A7"
+        android:pathData="M72,42m-2.5,0a2.5,2.5 0,1,1 5,0a2.5,2.5 0,1,1 -5,0" />
+</vector>

@@ -1,0 +1,29 @@
+cmake_minimum_required(VERSION 3.20)
+project(macvolume LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+if(NOT APPLE)
+    message(FATAL_ERROR "libmacvolume is macOS-only")
+endif()
+
+find_package(JNI REQUIRED)
+
+set(MACVOLUME_OUTPUT_DIR "${CMAKE_BINARY_DIR}/natives" CACHE PATH "Directory for libmacvolume.dylib")
+
+add_library(macvolume SHARED MacVolume.cpp)
+target_include_directories(macvolume PRIVATE ${JNI_INCLUDE_DIRS})
+
+find_library(COREAUDIO_FRAMEWORK CoreAudio REQUIRED)
+target_link_libraries(macvolume PRIVATE ${COREAUDIO_FRAMEWORK})
+
+set_target_properties(macvolume PROPERTIES
+    OUTPUT_NAME "macvolume"
+    LIBRARY_OUTPUT_DIRECTORY "${MACVOLUME_OUTPUT_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${MACVOLUME_OUTPUT_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${MACVOLUME_OUTPUT_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${MACVOLUME_OUTPUT_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${MACVOLUME_OUTPUT_DIR}"
+)

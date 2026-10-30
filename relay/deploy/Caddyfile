@@ -1,0 +1,6 @@
+{$RELAY_DOMAIN} {
+	encode zstd gzip
+	# Websockets pass through as they are. Caddy replaces X-Forwarded-For with
+	# the real client address, which the relay uses for rate limits.
+	reverse_proxy relay:8080
+}

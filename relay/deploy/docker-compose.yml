@@ -1,0 +1,41 @@
+# Relay + Caddy. Caddy gets and renews the Let's Encrypt certificate by itself.
+# Needs: a DNS A/AAAA record for RELAY_DOMAIN pointing at this server, ports 80 and 443 open.
+# Values come from .env next to this file (deploy.sh writes it; see relay.env.example).
+services:
+  relay:
+    build: .
+    image: remote-controller-relay:latest
+    restart: unless-stopped
+    environment:
+      RELAY_ORIGIN: https://${RELAY_DOMAIN:?set RELAY_DOMAIN in .env}
+      RELAY_TRUST_PROXY: "true"
+    expose:
+      - "8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - relay
+    environment:
+      RELAY_DOMAIN: ${RELAY_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 690" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif" font-size="14">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="860" height="690" fill="#ffffff"/>
+
+  <!-- columns -->
+  <rect x="30" y="20" width="230" height="56" rx="10" fill="#e0f2fe" stroke="#0284c7"/>
+  <text x="145" y="44" text-anchor="middle" font-weight="700" fill="#0c4a6e">Phone / browser</text>
+  <text x="145" y="63" text-anchor="middle" fill="#0c4a6e" font-size="12">code, stored grant, or nothing</text>
+
+  <rect x="600" y="20" width="230" height="56" rx="10" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="715" y="44" text-anchor="middle" font-weight="700" fill="#14532d">PC</text>
+  <text x="715" y="63" text-anchor="middle" fill="#14532d" font-size="12">code XXXX-XXXX-XXXX, or Allow</text>
+
+  <line x1="145" y1="76" x2="145" y2="600" stroke="#94a3b8" stroke-dasharray="4 4"/>
+  <line x1="715" y1="76" x2="715" y2="600" stroke="#94a3b8" stroke-dasharray="4 4"/>
+
+  <!-- layer 1: TLS -->
+  <rect x="20" y="92" width="820" height="72" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="34" y="112" font-weight="700" fill="#334155">1 · TLS (wss://, https://)</text>
+  <line x1="150" y1="138" x2="708" y2="138" stroke="#475569" stroke-width="1.5" marker-end="url(#a)" marker-start="url(#a)"/>
+  <text x="430" y="130" text-anchor="middle" fill="#334155" font-size="12">LAN: PC's local CA (LAN names only) · relay: public certificate</text>
+  <text x="430" y="156" text-anchor="middle" fill="#64748b" font-size="12">LinkGate: private address, same Origin, time limit, throttle</text>
+
+  <!-- layer 2: handshake -->
+  <rect x="20" y="178" width="820" height="320" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="34" y="198" font-weight="700" fill="#334155">2 · Link v2 handshake inside TLS (end to end, also through the relay)</text>
+
+  <line x1="708" y1="230" x2="152" y2="230" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="430" y="222" text-anchor="middle" fill="#334155">hello { PC ephemeral P-256 key, auth: code | approve }</text>
+
+  <line x1="152" y1="268" x2="708" y2="268" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="430" y="260" text-anchor="middle" fill="#334155">join { device ephemeral P-256 key, name, grant id? }</text>
+
+  <rect x="170" y="282" width="520" height="80" rx="8" fill="#fef9c3" stroke="#ca8a04"/>
+  <text x="430" y="304" text-anchor="middle" fill="#713f12">both sides: ECDH → shared secret</text>
+  <text x="430" y="326" text-anchor="middle" fill="#713f12" font-size="13">HKDF-SHA256(salt = code | grant key | empty, info = hash(both keys))</text>
+  <text x="430" y="348" text-anchor="middle" fill="#713f12" font-size="13">→ key device→PC · key PC→device · 6-digit check number</text>
+
+  <line x1="152" y1="394" x2="708" y2="394" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="430" y="386" text-anchor="middle" fill="#334155">seal("confirm"): the device proves the secret first</text>
+
+  <rect x="170" y="406" width="520" height="34" rx="8" fill="#ffedd5" stroke="#ea580c"/>
+  <text x="430" y="428" text-anchor="middle" fill="#7c2d12" font-size="13">no code: Allow dialog on the PC shows the check number; the device shows it too</text>
+
+  <line x1="708" y1="474" x2="152" y2="474" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="430" y="466" text-anchor="middle" fill="#334155">seal(ready { grant for the device's other sockets })</text>
+
+  <!-- layer 3: traffic -->
+  <rect x="20" y="512" width="820" height="88" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="34" y="532" font-weight="700" fill="#334155">3 · Every frame</text>
+  <line x1="152" y1="560" x2="708" y2="560" stroke="#16a34a" stroke-width="2.5" marker-end="url(#a)" marker-start="url(#a)"/>
+  <text x="430" y="552" text-anchor="middle" fill="#14532d">AES-256-GCM, own key per direction, sequence number as associated data</text>
+  <text x="430" y="584" text-anchor="middle" fill="#64748b" font-size="12">replayed, reordered, reflected or altered frame → fails to open → link dropped</text>
+
+  <text x="430" y="632" text-anchor="middle" fill="#334155" font-size="13">The code never travels over the network. The PC sends nothing sealed until "confirm" opens,</text>
+  <text x="430" y="652" text-anchor="middle" fill="#334155" font-size="13">so a peer that only connects gets nothing to test codes against offline.</text>
+  <text x="430" y="672" text-anchor="middle" fill="#64748b" font-size="12">New code, new grants and new keys on every start.</text>
+</svg>

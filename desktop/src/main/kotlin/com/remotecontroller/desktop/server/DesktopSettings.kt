@@ -1,0 +1,69 @@
+package com.remotecontroller.desktop.server
+
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import java.io.File
+import java.util.prefs.Preferences
+
+/** Settings that survive a restart. Stored in the user's Java preferences. */
+class DesktopSettings {
+    private val prefs = Preferences.userRoot().node("com/remotecontroller/desktop")
+
+    val requireCode: StateFlow<Boolean>
+        field = MutableStateFlow(prefs.getBoolean(KEY_REQUIRE_CODE, true))
+
+    val relayEnabled: StateFlow<Boolean>
+        field = MutableStateFlow(prefs.getBoolean(KEY_RELAY_ENABLED, false))
+
+    val relayUrl: StateFlow<String>
+        field = MutableStateFlow(prefs.get(KEY_RELAY_URL, DEFAULT_RELAY_URL))
+
+    fun setRequireCode(enabled: Boolean) {
+        prefs.putBoolean(KEY_REQUIRE_CODE, enabled)
+        requireCode.value = enabled
+    }
+
+    fun setRelayEnabled(enabled: Boolean) {
+        prefs.putBoolean(KEY_RELAY_ENABLED, enabled)
+        relayEnabled.value = enabled
+    }
+
+    fun setRelayUrl(url: String) {
+        val cleaned = url.trim().trimEnd('/')
+        prefs.put(KEY_RELAY_URL, cleaned)
+        relayUrl.value = cleaned
+    }
+
+    private companion object {
+        const val KEY_REQUIRE_CODE = "requireCode"
+        const val KEY_RELAY_ENABLED = "relayEnabled"
+        const val KEY_RELAY_URL = "relayUrl"
+        const val DEFAULT_RELAY_URL = ""
+    }
+}
+
+/** This user's app folder: the local CA and the relay device key live here. */
+internal object AppFiles {
+    val directory: File by lazy {
+        val home = System.getProperty("user.home")
+        val os = System.getProperty("os.name")
+        val directory = when {
+            os.startsWith("Mac") -> File(home, "Library/Application Support/Remote Controller")
+            os.startsWith("Win") -> File(System.getenv("APPDATA") ?: home, "Remote Controller")
+            else -> File(
+                System.getenv("XDG_DATA_HOME")?.takeIf { it.isNotBlank() } ?: "$home/.local/share",
+                "remote-controller",
+            )
+        }
+        directory.mkdirs()
+        directory
+    }
+
+    /** Owner-only on POSIX; on Windows %APPDATA% is already per user. */
+    fun restrict(file: File) {
+        file.setReadable(false, false)
+        file.setReadable(true, true)
+        file.setWritable(false, false)
+        file.setWritable(true, true)
+    }
+}
