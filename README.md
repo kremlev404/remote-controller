@@ -80,12 +80,12 @@ More in the [user guide](docs/using.md).
 ## Build from source
 
 ```bash
-./gradlew :desktop:run             # PC app, with the web page bundled
-./gradlew :android:assembleDebug   # Android
+./gradlew :server:desktop:run             # PC app, with the web page bundled
+./gradlew :client:android:assembleDebug   # Android
 ./gradlew packageDesktop           # portable app for this OS
 ```
 
-For iOS, open `iosApp` in Xcode.
+For iOS, open `client/iosApp` in Xcode.
 
 ## Documentation
 

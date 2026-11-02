@@ -12,7 +12,7 @@ Goal: 60 fps at 1080p, light on the PC.
 
 - **Capture:** DXGI Desktop Duplication instead of `Robot`.
 - **Scaling and colour:** D3D11 video processor on the GPU.
-- **Encoding:** hardware H.264 through Media Foundation, in `screencast.dll` (`:host:screencast`).
+- **Encoding:** hardware H.264 through Media Foundation, in `screencast.dll` (`:server:host:screencast`).
 - **Transport:** kept `wss` and Link v2.
 - **Playback:** `MediaCodec` on Android, WebCodecs in the browser.
 - **Still screen:** no changes, no frames.

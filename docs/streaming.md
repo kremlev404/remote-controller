@@ -4,14 +4,14 @@ The picture is H.264 on Windows, macOS and Linux. Nothing heavy runs on the CPU 
 
 | Step | Windows | macOS | Linux (X11) |
 |---|---|---|---|
-| Capture | DXGI Desktop Duplication | ScreenCaptureKit | X11 shared memory |
+| Capture | DXGI Desktop Duplication, then Windows Graphics Capture | ScreenCaptureKit | X11 shared memory |
 | Scale, color | D3D11 video processor | ScreenCaptureKit, on the GPU | The library, on the CPU |
 | Encode | Hardware Media Foundation transform | VideoToolbox | GStreamer: VA-API, NVENC, Quick Sync or V4L2, then x264 or OpenH264 |
 | Send | The same `wss` socket and Link v2 as everything else | Same | Same |
 
 Viewers play it with `MediaCodec` on a surface on Android and WebCodecs in the browser.
 
-`:host:screencast` does the first three steps in one small native library, with no codec of its own. GStreamer is opened at run time, so the Linux app has no hard dependency on it: most desktops have it, and `gstreamer1.0-plugins-ugly` adds x264 where nothing else is there.
+`:server:host:screencast` does the first three steps in one small native library, with no codec of its own. GStreamer is opened at run time, so the Linux app has no hard dependency on it: most desktops have it, and `gstreamer1.0-plugins-ugly` adds x264 where nothing else is there.
 
 **The Stream menu** in the Screen row of the laptop app picks the route, for all viewers, and takes effect at once:
 
@@ -21,7 +21,11 @@ Viewers play it with `MediaCodec` on a surface on Android and WebCodecs in the b
 | Tiles | Only the parts of the screen that changed, as JPEG, compressed on every core | Nothing but a JPEG decoder |
 | JPEG | The original stream: whole pictures through AWT Robot, capped at 1280 pixels | Nothing, and it works with older apps |
 
-What a viewer or the PC cannot do falls to the next row by itself, so H.264 falling through gives tiles, not the slow route. iOS has no video decoder yet and gets tiles. On Windows tiles read the screen through Robot, because the library only hands out video there.
+What a viewer or the PC cannot do falls to the next row by itself, so H.264 falling through gives tiles, not the slow route. iOS has no video decoder yet and gets tiles. Tiles read the screen through the library, and through AWT Robot only if the library cannot reach it.
+
+**Laptops with two GPUs.** Desktop Duplication only works on the GPU that drives the display, and Windows answers `0x887A0004` on the other one, even though both can list the monitor. So the library tries duplication on every GPU that lists the display, then Windows Graphics Capture on every GPU, the lowest-power one first. Windows Graphics Capture carries the picture across GPUs by itself, so the chain can also move to whichever GPU has an encoder when the display's has none. NVIDIA, AMD and Intel all go through the same code. Windows 10 draws a yellow border around a display captured this way; Windows 11 lets the app turn it off. The server log names the route in use, and every route that failed.
+
+**Choosing the GPU.** On Windows, the Screen row shows a graphics card menu when H.264 is selected and two or more GPUs have a hardware encoder. Auto starts with the lowest-power GPU. A picked GPU comes first by either capture route, and if it fails the stream falls back to Auto's order rather than losing the picture. The choice is stored by the card's name, and a card that has left the PC reads as Auto.
 
 - **A still screen costs almost nothing.** Capture waits for a change (on Linux it compares pictures, about 20 times a second). After motion stops, a few repeats sharpen the picture, then no frames go out at all.
 - **Frames are never dropped after encoding**, because each depends on the last. While a viewer's socket is busy, nothing is captured. If the link stays slow, the bitrate (or, for tiles, the JPEG quality) falls by a quarter a second and climbs back slowly. With several viewers, one that falls behind waits for a keyframe, so it does not hold up the others.

@@ -24,7 +24,7 @@ A device that got in once, by code or by Allow, gets a grant and is remembered: 
 The browser page is a Compose for Web (Wasm) app. Both the laptop (at `/web`) and the relay (at `/`) serve the same build.
 
 **On the LAN**
-1. On the laptop, press **Trust this computer** once. On macOS it adds the local CA to the login keychain; on Windows it opens `local-ca.crt` to install.
+1. On the laptop, press **Trust this computer** once. On macOS it adds the local CA to the login keychain; on Windows it adds the local CA to your own certificate store, after Windows asks you to confirm. Restart the browser afterwards. Firefox keeps its own store: import `local-ca.crt` there.
 2. Open `https://<address>/web`. To skip typing the code, add it as a fragment: `https://<address>/web#XXXX-XXXX-XXXX`. The page removes the fragment from the address bar and history.
    Devices that do not trust the CA show a certificate warning; install `local-ca.crt` there or accept the warning.
 3. Type the code if the laptop asks for one; otherwise wait for **Allow**.

@@ -16,8 +16,9 @@ internal object Sdk {
     const val jvm = 21
 }
 
+/** Follows the project's path, without the `kmp` folder: packages and resources do not name it. */
 internal fun Project.remoteControllerNamespace(): String =
-    "com.remotecontroller." + path.removePrefix(":").replace(':', '.')
+    "com.remotecontroller." + path.removePrefix(":").replace(":kmp:", ":").replace(':', '.')
 
 internal val Project.libs: VersionCatalog
     get() = extensions.getByType<VersionCatalogsExtension>().named("libs")
@@ -31,6 +32,19 @@ internal fun Project.configureKmpTargets() {
             namespace = remoteControllerNamespace()
             compileSdk = Sdk.compile
             minSdk = Sdk.min
+        }
+    }
+}
+
+/** What every layer of the phone apps builds on. */
+internal fun Project.addClientDependencies() {
+    extensions.configure<KotlinMultiplatformExtension> {
+        sourceSets.named("commonMain") {
+            dependencies {
+                implementation(project(":shared"))
+                implementation(libs.findLibrary("kotlinx-coroutines-core").get())
+                implementation(libs.findLibrary("koin-core").get())
+            }
         }
     }
 }

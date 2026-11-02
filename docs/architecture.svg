@@ -21,7 +21,7 @@
 
   <rect x="56" y="124" width="184" height="72" rx="10" fill="#ffffff" stroke="#0284c7"/>
   <text x="148" y="154" text-anchor="middle" font-weight="700" fill="#0c4a6e">Android</text>
-  <text x="148" y="174" text-anchor="middle" font-size="12" fill="#0c4a6e">:android · MediaCodec</text>
+  <text x="148" y="174" text-anchor="middle" font-size="12" fill="#0c4a6e">:client:android · MediaCodec</text>
 
   <rect x="56" y="210" width="184" height="72" rx="10" fill="#ffffff" stroke="#0284c7"/>
   <text x="148" y="240" text-anchor="middle" font-weight="700" fill="#0c4a6e">iOS</text>
@@ -29,24 +29,24 @@
 
   <rect x="56" y="296" width="184" height="72" rx="10" fill="#ffffff" stroke="#0284c7"/>
   <text x="148" y="326" text-anchor="middle" font-weight="700" fill="#0c4a6e">Browser</text>
-  <text x="148" y="346" text-anchor="middle" font-size="12" fill="#0c4a6e">:web · Wasm · WebCodecs</text>
+  <text x="148" y="346" text-anchor="middle" font-size="12" fill="#0c4a6e">:client:web · Wasm · WebCodecs</text>
 
   <rect x="56" y="396" width="184" height="268" rx="10" fill="#f0f9ff" stroke="#7dd3fc"/>
   <text x="148" y="424" text-anchor="middle" font-size="13" font-weight="700" fill="#0c4a6e">Shared client code</text>
-  <text x="148" y="452" text-anchor="middle" font-size="12" fill="#0c4a6e">:client:feature:*</text>
+  <text x="148" y="452" text-anchor="middle" font-size="12" fill="#0c4a6e">:client:kmp:feature:*</text>
   <text x="148" y="470" text-anchor="middle" font-size="12" fill="#334155">connect · remote · screen</text>
   <text x="148" y="488" text-anchor="middle" font-size="12" fill="#334155">settings</text>
-  <text x="148" y="520" text-anchor="middle" font-size="12" fill="#0c4a6e">:client:domain</text>
+  <text x="148" y="520" text-anchor="middle" font-size="12" fill="#0c4a6e">:client:kmp:domain</text>
   <text x="148" y="538" text-anchor="middle" font-size="12" fill="#334155">use cases</text>
-  <text x="148" y="570" text-anchor="middle" font-size="12" fill="#0c4a6e">:client:data</text>
+  <text x="148" y="570" text-anchor="middle" font-size="12" fill="#0c4a6e">:client:kmp:data</text>
   <text x="148" y="588" text-anchor="middle" font-size="12" fill="#334155">sockets, link</text>
-  <text x="148" y="620" text-anchor="middle" font-size="12" fill="#0c4a6e">:client:storage</text>
+  <text x="148" y="620" text-anchor="middle" font-size="12" fill="#0c4a6e">:client:kmp:storage</text>
   <text x="148" y="638" text-anchor="middle" font-size="12" fill="#334155">saved PCs, grants</text>
 
   <!-- Your PC -->
   <rect x="404" y="64" width="408" height="620" rx="12" fill="#ffffff" stroke="#16a34a" stroke-width="1.5"/>
   <text x="608" y="90" text-anchor="middle" font-size="15" font-weight="700" fill="#14532d">Your PC is the host</text>
-  <text x="608" y="108" text-anchor="middle" font-size="12" fill="#14532d">:desktop · Compose Desktop</text>
+  <text x="608" y="108" text-anchor="middle" font-size="12" fill="#14532d">:server:desktop · Compose Desktop</text>
 
   <rect x="424" y="124" width="368" height="56" rx="8" fill="#dcfce7" stroke="#16a34a"/>
   <text x="608" y="148" text-anchor="middle" font-weight="700" fill="#14532d">Ktor server · HTTPS and WSS on port 8765</text>
@@ -77,7 +77,7 @@
   <text x="736" y="420" text-anchor="middle" font-size="12" fill="#334155">media keys</text>
 
   <rect x="424" y="442" width="368" height="108" rx="8" fill="#ecfeff" stroke="#0891b2"/>
-  <text x="608" y="466" text-anchor="middle" font-weight="700" fill="#155e75">:host:screencast · native capture and encoding</text>
+  <text x="608" y="466" text-anchor="middle" font-weight="700" fill="#155e75">:server:host:screencast · native capture and encoding</text>
   <text x="608" y="490" text-anchor="middle" font-size="12" fill="#155e75">Windows: Desktop Duplication + Media Foundation</text>
   <text x="608" y="510" text-anchor="middle" font-size="12" fill="#155e75">macOS: ScreenCaptureKit + VideoToolbox</text>
   <text x="608" y="530" text-anchor="middle" font-size="12" fill="#155e75">Linux: X11 + GStreamer</text>
@@ -112,7 +112,7 @@
 
   <rect x="896" y="432" width="248" height="130" rx="10" fill="#ede9fe" stroke="#7c3aed"/>
   <text x="1020" y="464" text-anchor="middle" font-weight="700" fill="#4c1d95">Relay you run yourself</text>
-  <text x="1020" y="486" text-anchor="middle" font-size="12" fill="#4c1d95">:relay · Ktor</text>
+  <text x="1020" y="486" text-anchor="middle" font-size="12" fill="#4c1d95">:server:relay · Ktor</text>
   <text x="1020" y="512" text-anchor="middle" font-size="12" fill="#4c1d95">Pipes sealed frames between</text>
   <text x="1020" y="530" text-anchor="middle" font-size="12" fill="#4c1d95">PC IDs. It holds no key,</text>
   <text x="1020" y="548" text-anchor="middle" font-size="12" fill="#4c1d95">so it cannot read the stream.</text>

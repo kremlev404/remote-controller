@@ -155,6 +155,9 @@ sealed interface ServerMessage {
 object RemoteKeys {
     val DEFAULT_PORT: Int = ServerPort.DEFAULT.value
 
+    /** The most a viewer can scroll in one message, either way. */
+    const val MAX_SCROLL_STEPS: Int = 20
+
     val MEDIA_KEYS = listOf("PLAY_PAUSE", "NEXT", "PREVIOUS", "STOP")
     val ARROW_KEYS = listOf("UP", "DOWN", "LEFT", "RIGHT")
     val MODIFIER_KEYS = listOf("CTRL", "ALT", "SHIFT", "WIN")

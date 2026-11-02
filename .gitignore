@@ -38,7 +38,7 @@ google-services.json
 # Xcode
 xcuserdata/
 *.xcuserstate
-iosApp/build/
+client/iosApp/build/
 
 # macOS
 .DS_Store

@@ -7,26 +7,26 @@ This works like TeamViewer or RustDesk:
 
 ## Deploy the relay
 
-You need a server with a public IP, a domain whose DNS A/AAAA record points at it, and ports 80 and 443 open. [`relay/deploy/deploy.sh`](../relay/deploy/deploy.sh) builds the relay on your machine and installs it in one of two ways:
+You need a server with a public IP, a domain whose DNS A/AAAA record points at it, and ports 80 and 443 open. [`server/relay/deploy/deploy.sh`](../server/relay/deploy/deploy.sh) builds the relay on your machine and installs it in one of two ways:
 
 | Mode | What runs on the server | Certificate |
 |---|---|---|
-| `docker` | relay + [Caddy](../relay/deploy/Caddyfile) with Docker Compose | Caddy gets and renews it |
-| `systemd` | relay as a hardened [systemd service](../relay/deploy/systemd/remote-controller-relay.service) behind [nginx](../relay/deploy/nginx/relay.conf) | certbot gets it; its timer renews it |
+| `docker` | relay + [Caddy](../server/relay/deploy/Caddyfile) with Docker Compose | Caddy gets and renews it |
+| `systemd` | relay as a hardened [systemd service](../server/relay/deploy/systemd/remote-controller-relay.service) behind [nginx](../server/relay/deploy/nginx/relay.conf) | certbot gets it; its timer renews it |
 
 ```bash
 # Docker on the server (needs Docker with the compose plugin there)
-./relay/deploy/deploy.sh docker --domain relay.example.com --host root@203.0.113.10
+./server/relay/deploy/deploy.sh docker --domain relay.example.com --host root@203.0.113.10
 
 # systemd + nginx on Debian, Ubuntu or Fedora (needs sudo there; installs Java 21, nginx, certbot)
-./relay/deploy/deploy.sh systemd --domain relay.example.com --host admin@203.0.113.10 --email you@example.com
+./server/relay/deploy/deploy.sh systemd --domain relay.example.com --host admin@203.0.113.10 --email you@example.com
 
 # Docker on this machine, or only the bundle to copy anywhere yourself
-./relay/deploy/deploy.sh docker --domain relay.example.com
-./relay/deploy/deploy.sh bundle --domain relay.example.com     # → relay/build/deploy
+./server/relay/deploy/deploy.sh docker --domain relay.example.com
+./server/relay/deploy/deploy.sh bundle --domain relay.example.com     # → relay/build/deploy
 ```
 
-The bundle in `relay/build/deploy` holds the built relay, the [Dockerfile](../relay/deploy/Dockerfile) (runtime only, non-root), [docker-compose.yml](../relay/deploy/docker-compose.yml) and `.env`, and the nginx and systemd files with the domain filled in. Add `--skip-build` to reuse the last build.
+The bundle in `server/relay/build/deploy` holds the built relay, the [Dockerfile](../server/relay/deploy/Dockerfile) (runtime only, non-root), [docker-compose.yml](../server/relay/deploy/docker-compose.yml) and `.env`, and the nginx and systemd files with the domain filled in. Add `--skip-build` to reuse the last build.
 
 What each setup locks down:
 - **Relay process.** In Docker it is read-only, drops all capabilities, sets `no-new-privileges` and is capped at 512 MB. Under systemd it uses `DynamicUser`, `ProtectSystem=strict`, `ProtectHome`, no capabilities, and listens on `127.0.0.1` only.

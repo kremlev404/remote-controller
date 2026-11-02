@@ -10,7 +10,7 @@ class JvmLibraryConventionPlugin : Plugin<Project> {
         pluginManager.apply("org.jetbrains.kotlin.jvm")
 
         extensions.configure<KotlinJvmProjectExtension> {
-            jvmToolchain(21)
+            jvmToolchain(Sdk.jvm)
         }
     }
 }

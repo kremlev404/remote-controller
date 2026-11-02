@@ -27,7 +27,7 @@ if [[ ${#missing[@]} -gt 0 ]]; then
     exit 1
 fi
 
-(cd "$PROJECT_ROOT" && ./gradlew :desktop:packageDesktop --no-daemon "$@")
+(cd "$PROJECT_ROOT" && ./gradlew :server:desktop:packageDesktop --no-daemon "$@")
 
 echo
 ls -lh "$PROJECT_ROOT"/artifacts/desktop/*.tar.xz

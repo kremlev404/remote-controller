@@ -44,4 +44,25 @@ sealed interface ScreenFeed {
     data class Tiles(val tiles: ScreenFrame.Tiles) : ScreenFeed
     data object HostPaused : ScreenFeed
     data object HostLive : ScreenFeed
+
+    companion object {
+        /** What one opened frame of the screen socket carries. Null for anything a viewer has no use for. */
+        fun read(kind: Byte, body: ByteArray): ScreenFeed? = when (kind) {
+            LinkFrame.BYTES -> readPacket(body)
+            LinkFrame.TEXT -> readSignal(body.decodeToString())
+            else -> null
+        }
+
+        private fun readPacket(packet: ByteArray): ScreenFeed? {
+            ScreenFrame.unpackVideo(packet)?.let { return Video(it) }
+            if (ScreenFrame.isTiles(packet)) return ScreenFrame.unpackTiles(packet)?.let(::Tiles)
+            return ScreenFrame.unpack(packet)?.let(::Picture)
+        }
+
+        private fun readSignal(text: String): ScreenFeed? = when {
+            ScreenSignal.isPaused(text) -> HostPaused
+            ScreenSignal.isLive(text) -> HostLive
+            else -> null
+        }
+    }
 }
