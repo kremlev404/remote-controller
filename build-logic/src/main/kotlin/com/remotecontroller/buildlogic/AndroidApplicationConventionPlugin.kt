@@ -17,10 +17,12 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             defaultConfig {
                 minSdk = Sdk.min
                 targetSdk = Sdk.target
+                versionCode = product.versionCode
+                versionName = product.version
             }
             compileOptions {
-                sourceCompatibility = JavaVersion.VERSION_21
-                targetCompatibility = JavaVersion.VERSION_21
+                sourceCompatibility = JavaVersion.toVersion(Sdk.jvm)
+                targetCompatibility = JavaVersion.toVersion(Sdk.jvm)
             }
             buildFeatures.compose = true
         }

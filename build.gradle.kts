@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.android.kmp.library) apply false
@@ -12,16 +10,8 @@ plugins {
     alias(libs.plugins.androidx.room3) apply false
 }
 
-val productProperties = Properties().apply {
-    file("version.properties").inputStream().use { load(it) }
-}
-
-extra["productName"] = productProperties.getProperty("name").trim()
-extra["productVersion"] = productProperties.getProperty("version").trim()
-extra["productVersionCode"] = productProperties.getProperty("versionCode").trim().toInt()
-
 tasks.register("packageDesktop") {
     group = "distribution"
     description = "Build every desktop artifact into artifacts/desktop"
-    dependsOn(":desktop:packageDesktop")
+    dependsOn(":server:desktop:packageDesktop")
 }

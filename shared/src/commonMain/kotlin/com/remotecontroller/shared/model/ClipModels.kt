@@ -54,6 +54,20 @@ sealed interface ClipRequest {
         val y: Float,
         val deltaY: Int,
     ) : ClipRequest
+
+    @Serializable
+    @SerialName("type")
+    data class Type(
+        val text: String,
+        val backspaces: Int = 0,
+    ) : ClipRequest
+
+    @Serializable
+    @SerialName("key")
+    data class Key(
+        val code: String,
+        val down: Boolean,
+    ) : ClipRequest
 }
 
 @Serializable

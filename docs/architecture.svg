@@ -1,112 +1,129 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 920" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif" font-size="14">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="14" role="img" aria-label="High level architecture: Android, iOS and browser clients connect to the desktop app over the home network, a browser outside it comes through an optional self-hosted relay, and one Kotlin codebase is shared by all of them.">
+  <title>Remote Controller high level architecture</title>
   <defs>
-    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+    <marker id="line" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0L10 5L0 10z" fill="#475569"/>
     </marker>
-    <marker id="v" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+    <marker id="relay" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0L10 5L0 10z" fill="#7c3aed"/>
     </marker>
-    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-      <path d="M0 0L10 5L0 10z" fill="#16a34a"/>
-    </marker>
   </defs>
-  <rect width="1000" height="920" fill="#ffffff"/>
+  <rect width="1200" height="800" fill="#ffffff"/>
 
-  <text x="30" y="32" font-size="18" font-weight="700" fill="#0f172a">Architecture and security</text>
+  <!-- Home network -->
+  <rect x="16" y="16" width="816" height="688" rx="16" fill="#f0fdf4" stroke="#16a34a" stroke-dasharray="7 5"/>
+  <text x="36" y="44" font-size="15" font-weight="700" fill="#14532d">Your home network: nothing here depends on anyone else's server</text>
 
-  <!-- LAN -->
-  <rect x="10" y="48" width="980" height="372" rx="14" fill="#f0fdf4" stroke="#16a34a" stroke-dasharray="6 4"/>
-  <text x="26" y="70" font-weight="700" fill="#14532d">Home network (private LAN)</text>
+  <!-- Clients -->
+  <rect x="36" y="64" width="224" height="620" rx="12" fill="#e0f2fe" stroke="#0284c7"/>
+  <text x="148" y="90" text-anchor="middle" font-size="15" font-weight="700" fill="#0c4a6e">Clients</text>
+  <text x="148" y="108" text-anchor="middle" font-size="12" fill="#0c4a6e">Compose Multiplatform</text>
 
-  <rect x="30" y="90" width="220" height="84" rx="10" fill="#e0f2fe" stroke="#0284c7"/>
-  <text x="140" y="116" text-anchor="middle" font-weight="700" fill="#0c4a6e">Phone app</text>
-  <text x="140" y="136" text-anchor="middle" font-size="12" fill="#0c4a6e">Android · iOS (Compose MP)</text>
-  <text x="140" y="156" text-anchor="middle" font-size="12" fill="#0c4a6e">optional CA fingerprint pin</text>
+  <rect x="56" y="124" width="184" height="72" rx="10" fill="#ffffff" stroke="#0284c7"/>
+  <text x="148" y="154" text-anchor="middle" font-weight="700" fill="#0c4a6e">Android</text>
+  <text x="148" y="174" text-anchor="middle" font-size="12" fill="#0c4a6e">:client:android · MediaCodec</text>
 
-  <rect x="30" y="210" width="220" height="84" rx="10" fill="#e0f2fe" stroke="#0284c7"/>
-  <text x="140" y="236" text-anchor="middle" font-weight="700" fill="#0c4a6e">Browser on the LAN</text>
-  <text x="140" y="256" text-anchor="middle" font-size="12" fill="#0c4a6e">page served by the PC at /web</text>
-  <text x="140" y="276" text-anchor="middle" font-size="12" fill="#0c4a6e">warns unless the local CA is trusted</text>
+  <rect x="56" y="210" width="184" height="72" rx="10" fill="#ffffff" stroke="#0284c7"/>
+  <text x="148" y="240" text-anchor="middle" font-weight="700" fill="#0c4a6e">iOS</text>
+  <text x="148" y="260" text-anchor="middle" font-size="12" fill="#0c4a6e">iosApp · tiles</text>
 
-  <!-- PC -->
-  <rect x="600" y="80" width="370" height="320" rx="12" fill="#ffffff" stroke="#16a34a" stroke-width="1.5"/>
-  <text x="785" y="104" text-anchor="middle" font-weight="700" fill="#14532d">PC · desktop app (Compose Desktop)</text>
+  <rect x="56" y="296" width="184" height="72" rx="10" fill="#ffffff" stroke="#0284c7"/>
+  <text x="148" y="326" text-anchor="middle" font-weight="700" fill="#0c4a6e">Browser</text>
+  <text x="148" y="346" text-anchor="middle" font-size="12" fill="#0c4a6e">:client:web · Wasm · WebCodecs</text>
 
-  <rect x="620" y="116" width="330" height="50" rx="8" fill="#dcfce7" stroke="#16a34a"/>
-  <text x="785" y="137" text-anchor="middle" fill="#14532d">HTTPS / WSS :8765 on the private LAN IP</text>
-  <text x="785" y="155" text-anchor="middle" font-size="11" fill="#14532d">leaf certificate from the local CA (LAN names only)</text>
+  <rect x="56" y="396" width="184" height="268" rx="10" fill="#f0f9ff" stroke="#7dd3fc"/>
+  <text x="148" y="424" text-anchor="middle" font-size="13" font-weight="700" fill="#0c4a6e">Shared client code</text>
+  <text x="148" y="452" text-anchor="middle" font-size="12" fill="#0c4a6e">:client:kmp:feature:*</text>
+  <text x="148" y="470" text-anchor="middle" font-size="12" fill="#334155">connect · remote · screen</text>
+  <text x="148" y="488" text-anchor="middle" font-size="12" fill="#334155">settings</text>
+  <text x="148" y="520" text-anchor="middle" font-size="12" fill="#0c4a6e">:client:kmp:domain</text>
+  <text x="148" y="538" text-anchor="middle" font-size="12" fill="#334155">use cases</text>
+  <text x="148" y="570" text-anchor="middle" font-size="12" fill="#0c4a6e">:client:kmp:data</text>
+  <text x="148" y="588" text-anchor="middle" font-size="12" fill="#334155">sockets, link</text>
+  <text x="148" y="620" text-anchor="middle" font-size="12" fill="#0c4a6e">:client:kmp:storage</text>
+  <text x="148" y="638" text-anchor="middle" font-size="12" fill="#334155">saved PCs, grants</text>
 
-  <rect x="620" y="176" width="330" height="96" rx="8" fill="#fef9c3" stroke="#ca8a04"/>
-  <text x="785" y="196" text-anchor="middle" font-weight="700" fill="#713f12">LinkGate · admission</text>
-  <text x="785" y="216" text-anchor="middle" font-size="11" fill="#713f12">private address only · same Origin · 10 s handshake limit</text>
-  <text x="785" y="234" text-anchor="middle" font-size="11" fill="#713f12">8 handshakes at once · 5 failures → 5 min block</text>
-  <text x="785" y="252" text-anchor="middle" font-size="11" fill="#713f12">access code, or Allow dialog with a check number</text>
+  <!-- Your PC -->
+  <rect x="404" y="64" width="408" height="620" rx="12" fill="#ffffff" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="608" y="90" text-anchor="middle" font-size="15" font-weight="700" fill="#14532d">Your PC is the host</text>
+  <text x="608" y="108" text-anchor="middle" font-size="12" fill="#14532d">:server:desktop · Compose Desktop</text>
 
-  <rect x="620" y="282" width="330" height="50" rx="8" fill="#f1f5f9" stroke="#94a3b8"/>
-  <text x="785" y="303" text-anchor="middle" font-size="13" fill="#334155">/ws commands · /stream screen · /web/ws clipboard</text>
-  <text x="785" y="321" text-anchor="middle" font-size="11" fill="#334155">→ keyboard, mouse, volume, screen capture</text>
+  <rect x="424" y="124" width="368" height="56" rx="8" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="608" y="148" text-anchor="middle" font-weight="700" fill="#14532d">Ktor server · HTTPS and WSS on port 8765</text>
+  <text x="608" y="167" text-anchor="middle" font-size="12" fill="#14532d">TLS from the PC's own local CA · serves the web page</text>
 
-  <rect x="620" y="342" width="330" height="46" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
-  <text x="785" y="362" text-anchor="middle" fill="#4c1d95">RelayLink · outgoing only, off by default</text>
-  <text x="785" y="379" text-anchor="middle" font-size="11" fill="#4c1d95">device key P-256 · ID = hash(public key)</text>
+  <rect x="424" y="192" width="368" height="56" rx="8" fill="#fef9c3" stroke="#ca8a04"/>
+  <text x="608" y="216" text-anchor="middle" font-weight="700" fill="#713f12">LinkGate · who gets in</text>
+  <text x="608" y="235" text-anchor="middle" font-size="12" fill="#713f12">access code or Allow · rate limits · end-to-end Link v2</text>
 
-  <!-- LAN arrows -->
-  <line x1="252" y1="132" x2="616" y2="138" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
-  <text x="434" y="124" text-anchor="middle" font-size="12" fill="#334155">wss://192.168.x.x:8765 · TLS</text>
+  <rect x="424" y="260" width="112" height="84" rx="8" fill="#f1f5f9" stroke="#94a3b8"/>
+  <text x="480" y="292" text-anchor="middle" font-weight="700" fill="#334155">Commands</text>
+  <text x="480" y="312" text-anchor="middle" font-size="12" fill="#334155">/ws</text>
+  <rect x="552" y="260" width="112" height="84" rx="8" fill="#f1f5f9" stroke="#94a3b8"/>
+  <text x="608" y="292" text-anchor="middle" font-weight="700" fill="#334155">Screen</text>
+  <text x="608" y="312" text-anchor="middle" font-size="12" fill="#334155">/stream</text>
+  <rect x="680" y="260" width="112" height="84" rx="8" fill="#f1f5f9" stroke="#94a3b8"/>
+  <text x="736" y="292" text-anchor="middle" font-weight="700" fill="#334155">Clipboard</text>
+  <text x="736" y="312" text-anchor="middle" font-size="12" fill="#334155">/web/ws</text>
 
-  <line x1="252" y1="250" x2="616" y2="158" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
-  <text x="430" y="232" text-anchor="middle" font-size="12" fill="#334155">https / wss :8765/web</text>
+  <rect x="424" y="356" width="240" height="74" rx="8" fill="#ecfeff" stroke="#0891b2"/>
+  <text x="544" y="382" text-anchor="middle" font-weight="700" fill="#155e75">Stream router</text>
+  <text x="544" y="402" text-anchor="middle" font-size="12" fill="#155e75">H.264, then tiles, then JPEG</text>
+  <text x="544" y="418" text-anchor="middle" font-size="11.500" fill="#155e75">a bitrate that follows the link</text>
 
-  <!-- Internet -->
-  <text x="26" y="462" font-weight="700" fill="#334155">Internet</text>
+  <rect x="680" y="356" width="112" height="74" rx="8" fill="#f1f5f9" stroke="#94a3b8"/>
+  <text x="736" y="384" text-anchor="middle" font-size="12.500" font-weight="700" fill="#334155">Input, volume</text>
+  <text x="736" y="404" text-anchor="middle" font-size="12" fill="#334155">mouse, keys,</text>
+  <text x="736" y="420" text-anchor="middle" font-size="12" fill="#334155">media keys</text>
 
-  <rect x="30" y="500" width="220" height="84" rx="10" fill="#e0f2fe" stroke="#0284c7"/>
-  <text x="140" y="526" text-anchor="middle" font-weight="700" fill="#0c4a6e">Browser anywhere</text>
-  <text x="140" y="546" text-anchor="middle" font-size="12" fill="#0c4a6e">page served by the relay</text>
-  <text x="140" y="566" text-anchor="middle" font-size="12" fill="#0c4a6e">no certificate warning</text>
+  <rect x="424" y="442" width="368" height="108" rx="8" fill="#ecfeff" stroke="#0891b2"/>
+  <text x="608" y="466" text-anchor="middle" font-weight="700" fill="#155e75">:server:host:screencast · native capture and encoding</text>
+  <text x="608" y="490" text-anchor="middle" font-size="12" fill="#155e75">Windows: Desktop Duplication + Media Foundation</text>
+  <text x="608" y="510" text-anchor="middle" font-size="12" fill="#155e75">macOS: ScreenCaptureKit + VideoToolbox</text>
+  <text x="608" y="530" text-anchor="middle" font-size="12" fill="#155e75">Linux: X11 + GStreamer</text>
 
-  <rect x="340" y="480" width="340" height="180" rx="12" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
-  <text x="510" y="504" text-anchor="middle" font-weight="700" fill="#4c1d95">Relay (self-hosted, :relay)</text>
-  <rect x="355" y="514" width="310" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa"/>
-  <text x="510" y="534" text-anchor="middle" font-size="12" fill="#4c1d95">TLS proxy · public certificate (Let's Encrypt)</text>
-  <text x="510" y="566" text-anchor="middle" font-size="12" fill="#4c1d95">ID registry: signed challenge, ID = hash(key)</text>
-  <text x="510" y="586" text-anchor="middle" font-size="12" fill="#4c1d95">pipes sessions frame by frame, ciphertext only</text>
-  <text x="510" y="606" text-anchor="middle" font-size="12" fill="#4c1d95">Origin check · rate limits · 16 tunnels per PC</text>
-  <text x="510" y="626" text-anchor="middle" font-size="12" fill="#4c1d95">serves the web page (HSTS, frame-ancestors none)</text>
+  <rect x="424" y="562" width="368" height="50" rx="8" fill="#ede9fe" stroke="#7c3aed"/>
+  <text x="608" y="583" text-anchor="middle" font-weight="700" fill="#4c1d95">RelayLink · off by default</text>
+  <text x="608" y="601" text-anchor="middle" font-size="12" fill="#4c1d95">outgoing only, so no router port is opened</text>
 
-  <line x1="252" y1="542" x2="336" y2="542" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#v)"/>
-  <text x="294" y="532" text-anchor="middle" font-size="11" fill="#4c1d95">https / wss</text>
+  <rect x="424" y="624" width="368" height="44" rx="8" fill="#f1f5f9" stroke="#94a3b8"/>
+  <text x="608" y="651" text-anchor="middle" font-weight="700" fill="#334155">TV over HDMI · speakers · apps</text>
 
-  <path d="M785 390 V560 H684" fill="none" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#v)"/>
-  <text x="797" y="452" font-size="12" fill="#4c1d95">outgoing wss through NAT</text>
-  <text x="797" y="470" font-size="11" fill="#4c1d95">no port forwarding</text>
-  <text x="797" y="488" font-size="11" fill="#4c1d95">/relay/host + /relay/accept/{session}</text>
+  <path d="M608 344v12" stroke="#475569" stroke-width="1.5" marker-end="url(#line)"/>
+  <path d="M736 344v12" stroke="#475569" stroke-width="1.5" marker-end="url(#line)"/>
+  <path d="M544 430v12" stroke="#475569" stroke-width="1.5" marker-end="url(#line)"/>
+  <path d="M608 180v12" stroke="#475569" stroke-width="1.5" marker-end="url(#line)"/>
+  <path d="M608 248v12" stroke="#475569" stroke-width="1.5" marker-end="url(#line)"/>
 
-  <!-- end to end -->
-  <path d="M140 586 V700 H900 V402" fill="none" stroke="#16a34a" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#g)"/>
-  <text x="520" y="692" text-anchor="middle" font-size="12" fill="#14532d">end-to-end link v2 through the pipe: the relay never holds a key</text>
+  <!-- Direct link -->
+  <path d="M242 160 C320 160 340 150 420 150" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#line)"/>
+  <path d="M242 246 C320 246 340 160 420 156" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#line)"/>
+  <path d="M242 332 C320 332 340 170 420 162" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#line)"/>
+  <text x="332" y="128" text-anchor="middle" font-size="12.500" font-weight="700" fill="#334155">Direct WSS</text>
+  <text x="332" y="112" text-anchor="middle" font-size="12" fill="#334155">encrypted end to end</text>
 
-  <!-- layers -->
-  <text x="30" y="750" font-weight="700" fill="#0f172a">Three layers on every connection</text>
+  <!-- Outside -->
+  <rect x="856" y="16" width="328" height="688" rx="16" fill="#faf5ff" stroke="#7c3aed" stroke-dasharray="7 5"/>
+  <text x="876" y="44" font-size="15" font-weight="700" fill="#4c1d95">Outside your home (optional)</text>
 
-  <rect x="30" y="764" width="300" height="130" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
-  <text x="46" y="788" font-weight="700" fill="#334155">1 · Transport (TLS)</text>
-  <text x="46" y="812" font-size="12" fill="#334155">LAN: local CA, name-constrained to</text>
-  <text x="46" y="832" font-size="12" fill="#334155">private IPs, localhost and .local</text>
-  <text x="46" y="852" font-size="12" fill="#334155">Relay: public certificate + HSTS</text>
-  <text x="46" y="872" font-size="12" fill="#334155">Phone: optional CA fingerprint pin</text>
+  <rect x="896" y="150" width="248" height="82" rx="10" fill="#ffffff" stroke="#7c3aed"/>
+  <text x="1020" y="182" text-anchor="middle" font-weight="700" fill="#4c1d95">Browser anywhere</text>
+  <text x="1020" y="204" text-anchor="middle" font-size="12" fill="#4c1d95">the same Wasm page</text>
 
-  <rect x="350" y="764" width="300" height="130" rx="10" fill="#fefce8" stroke="#ca8a04"/>
-  <text x="366" y="788" font-weight="700" fill="#713f12">2 · Admission (LinkGate)</text>
-  <text x="366" y="812" font-size="12" fill="#713f12">private address · same Origin</text>
-  <text x="366" y="832" font-size="12" fill="#713f12">time limit · throttle · handshake cap</text>
-  <text x="366" y="852" font-size="12" fill="#713f12">access code, or Allow on the PC</text>
-  <text x="366" y="872" font-size="12" fill="#713f12">Allow → grant for the device's other sockets</text>
+  <rect x="896" y="432" width="248" height="130" rx="10" fill="#ede9fe" stroke="#7c3aed"/>
+  <text x="1020" y="464" text-anchor="middle" font-weight="700" fill="#4c1d95">Relay you run yourself</text>
+  <text x="1020" y="486" text-anchor="middle" font-size="12" fill="#4c1d95">:server:relay · Ktor</text>
+  <text x="1020" y="512" text-anchor="middle" font-size="12" fill="#4c1d95">Pipes sealed frames between</text>
+  <text x="1020" y="530" text-anchor="middle" font-size="12" fill="#4c1d95">PC IDs. It holds no key,</text>
+  <text x="1020" y="548" text-anchor="middle" font-size="12" fill="#4c1d95">so it cannot read the stream.</text>
 
-  <rect x="670" y="764" width="300" height="130" rx="10" fill="#f0fdf4" stroke="#16a34a"/>
-  <text x="686" y="788" font-weight="700" fill="#14532d">3 · Link v2 (end to end)</text>
-  <text x="686" y="812" font-size="12" fill="#14532d">ephemeral ECDH P-256 per socket</text>
-  <text x="686" y="832" font-size="12" fill="#14532d">HKDF salt = code, grant key, or none</text>
-  <text x="686" y="852" font-size="12" fill="#14532d">AES-256-GCM, one key per direction</text>
-  <text x="686" y="872" font-size="12" fill="#14532d">sequence numbers stop replays</text>
+  <path d="M1020 232v196" fill="none" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#relay)"/>
+  <text x="1032" y="336" font-size="12" fill="#4c1d95">https, wss</text>
+  <path d="M796 587 C840 587 850 500 892 498" fill="none" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#relay)"/>
+  <text x="876" y="598" font-size="12" fill="#4c1d95">The PC dials out</text>
+
+  <!-- Shared -->
+  <rect x="16" y="720" width="1168" height="64" rx="12" fill="#f8fafc" stroke="#475569"/>
+  <text x="600" y="746" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">:shared · the Kotlin every client, the PC and the relay have in common</text>
+  <text x="600" y="768" text-anchor="middle" font-size="12.500" fill="#334155">protocol · models · frames · Link v2 crypto · relay protocol</text>
 </svg>

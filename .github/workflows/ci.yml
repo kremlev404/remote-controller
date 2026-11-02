@@ -112,7 +112,7 @@ jobs:
           cache: gradle
 
       - name: Build the portable app (.zip)
-        run: ./gradlew.bat :desktop:packageDesktop --no-daemon --stacktrace
+        run: ./gradlew.bat :server:desktop:packageDesktop --no-daemon --stacktrace
 
       - uses: actions/upload-artifact@v5
         with:
@@ -135,9 +135,9 @@ jobs:
           distribution: temurin
           cache: gradle
 
-      # Also builds libmacvolume with CMake (preinstalled on GitHub's Macs) against the JDK's jni.h.
+      # Also builds libmacvolume and libscreencast with CMake (preinstalled on GitHub's Macs) against the JDK's jni.h.
       - name: Build the .dmg
-        run: chmod +x gradlew && ./gradlew :desktop:packageDesktop --no-daemon --stacktrace
+        run: chmod +x gradlew && ./gradlew :server:desktop:packageDesktop --no-daemon --stacktrace
 
       - uses: actions/upload-artifact@v5
         with:
@@ -159,6 +159,10 @@ jobs:
           java-version: "21"
           distribution: temurin
           cache: gradle
+
+      # The screencast library captures through X11. GStreamer is opened at run time, so it needs no headers.
+      - name: Install the native build tools
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libx11-dev libxext-dev
 
       - name: Build the portable app (.tar.xz)
         run: chmod +x gradlew && ./scripts/build-linux.sh --stacktrace
@@ -199,11 +203,11 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: chmod +x gradlew && ./gradlew :android:assembleRelease --no-daemon
+        run: chmod +x gradlew && ./gradlew :client:android:assembleRelease --no-daemon
 
       - name: Check the signature and name the file
         run: |
-          apk="$(find android/build/outputs/apk/release -name '*.apk' | head -n 1)"
+          apk="$(find client/android/build/outputs/apk/release -name '*.apk' | head -n 1)"
           apksigner="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)"
           "$apksigner" verify --print-certs "$apk"
           mkdir -p out

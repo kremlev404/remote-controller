@@ -46,7 +46,7 @@ esac
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ARTIFACTS_DIR="$PROJECT_ROOT/artifacts/desktop"
-BINARIES_DIR="$PROJECT_ROOT/desktop/build/compose/binaries/main"
+BINARIES_DIR="$PROJECT_ROOT/server/desktop/build/compose/binaries/main"
 PACKAGE_NAME="Remote Controller Server"
 
 resolve_java_home() {
@@ -128,18 +128,18 @@ mkdir -p "$ARTIFACTS_DIR"
 
 TASKS=()
 if [[ "$CLEAN" == true ]]; then
-    TASKS+=(":desktop:clean")
+    TASKS+=(":server:desktop:clean")
 fi
 
 case "$TARGET" in
-    portable) TASKS+=(":desktop:createDistributable") ;;
-    exe) TASKS+=(":desktop:packageExe") ;;
-    msi) TASKS+=(":desktop:packageMsi") ;;
+    portable) TASKS+=(":server:desktop:createDistributable") ;;
+    exe) TASKS+=(":server:desktop:packageExe") ;;
+    msi) TASKS+=(":server:desktop:packageMsi") ;;
     all)
         TASKS+=(
-            ":desktop:createDistributable"
-            ":desktop:packageExe"
-            ":desktop:packageMsi"
+            ":server:desktop:createDistributable"
+            ":server:desktop:packageExe"
+            ":server:desktop:packageMsi"
         )
         ;;
 esac

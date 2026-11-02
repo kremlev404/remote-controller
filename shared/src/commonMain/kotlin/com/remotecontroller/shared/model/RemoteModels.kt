@@ -58,6 +58,15 @@ sealed interface RemoteCommand {
     data class KeyCombo(val keys: List<String>) : RemoteCommand
 
     @Serializable
+    @SerialName("type_text")
+    data class TypeText(val text: String, val backspaces: Int = 0) : RemoteCommand
+
+    /** One physical key going down or up, from a captured keyboard. [code] is `KeyboardEvent.code`. */
+    @Serializable
+    @SerialName("key_state")
+    data class KeyState(val code: String, val down: Boolean) : RemoteCommand
+
+    @Serializable
     @SerialName("mouse_move")
     data class MouseMove(val dx: Int, val dy: Int) : RemoteCommand
 
@@ -98,6 +107,8 @@ fun RemoteCommand.describe(): String = when (this) {
     is RemoteCommand.MuteToggle -> "Toggle Mute"
     is RemoteCommand.KeyPress -> "Key: $key"
     is RemoteCommand.KeyCombo -> "Combo: ${keys.joinToString("+")}"
+    is RemoteCommand.TypeText -> "Typed text"
+    is RemoteCommand.KeyState -> "Keyboard"
     is RemoteCommand.MouseMove -> "Mouse move ($dx, $dy)"
     is RemoteCommand.MouseClick -> "Mouse ${button.lowercase()} click"
     is RemoteCommand.MouseScroll -> "Mouse scroll $deltaY"
@@ -143,6 +154,9 @@ sealed interface ServerMessage {
 
 object RemoteKeys {
     val DEFAULT_PORT: Int = ServerPort.DEFAULT.value
+
+    /** The most a viewer can scroll in one message, either way. */
+    const val MAX_SCROLL_STEPS: Int = 20
 
     val MEDIA_KEYS = listOf("PLAY_PAUSE", "NEXT", "PREVIOUS", "STOP")
     val ARROW_KEYS = listOf("UP", "DOWN", "LEFT", "RIGHT")

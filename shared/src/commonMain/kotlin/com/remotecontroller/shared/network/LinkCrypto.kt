@@ -38,7 +38,7 @@ object LinkAuth {
     /** The client salts the keys with the access code shown on the PC. */
     const val CODE = "code"
 
-    /** No code. The PC owner presses Allow; the client then gets a grant for its next sockets. */
+    /** No code. The PC owner presses Allow; the client then gets a grant and is not asked again. */
     const val APPROVE = "approve"
 }
 
@@ -47,6 +47,8 @@ data class LinkHello(
     val v: Int = LinkCrypto.VERSION,
     val pub: String,
     val auth: String = LinkAuth.CODE,
+    /** Stays the same when the PC's address changes: clients keep their grant under it. */
+    val pc: String = "",
 )
 
 @Serializable
@@ -63,7 +65,8 @@ data class LinkReady(
     val grantKey: String? = null,
 )
 
-/** A grant lets the other sockets of an approved device skip the prompt. */
+/** A grant lets a device that got in once come back without the code or the prompt. */
+@Serializable
 data class LinkGrant(
     val id: String,
     val key: String,
@@ -148,8 +151,8 @@ object LinkCrypto {
         return LinkIdentity(der, pair.privateKey)
     }
 
-    fun hello(identity: LinkIdentity, auth: String): String =
-        RemoteJson.encode(LinkHello(pub = Base64.encode(identity.publicDer), auth = auth))
+    fun hello(identity: LinkIdentity, auth: String, pc: String): String =
+        RemoteJson.encode(LinkHello(pub = Base64.encode(identity.publicDer), auth = auth, pc = pc))
 
     fun readJoin(text: String): LinkJoin {
         if (text.length > MAX_HANDSHAKE_TEXT) error("join too large")
@@ -177,7 +180,7 @@ object LinkCrypto {
     }
 
     /**
-     * Client side. Pass the access code when the PC asks for one, otherwise a stored grant (or none).
+     * Client side. A stored grant wins; without one, pass the access code when the PC asks for it.
      * Returns the join text to send and the cipher to open `ready` with.
      */
     suspend fun join(
@@ -187,11 +190,11 @@ object LinkCrypto {
         deviceName: String,
     ): Pair<String, LinkCipher> {
         val secret = when {
+            grant != null -> grantSecret(grant.key)
             offer.needsCode -> {
                 if (!isCode(code)) throw AccessCodeRequired()
                 codeSecret(code)
             }
-            grant != null -> grantSecret(grant.key)
             else -> ByteArray(0)
         }
         val mine = generate()
@@ -207,7 +210,7 @@ object LinkCrypto {
         val join = LinkJoin(
             pub = Base64.encode(mine.publicDer),
             name = deviceName.take(48),
-            grant = if (offer.needsCode) null else grant?.id,
+            grant = grant?.id,
         )
         return RemoteJson.encode(join) to cipher
     }

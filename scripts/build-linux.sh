@@ -16,6 +16,8 @@ fi
 
 missing=()
 command -v xz >/dev/null 2>&1 || missing+=("xz (apt: xz-utils, pacman: xz)")
+command -v cmake >/dev/null 2>&1 || missing+=("cmake and a C++ compiler (apt: cmake g++, pacman: cmake gcc)")
+[[ -f /usr/include/X11/extensions/XShm.h ]] || missing+=("X11 headers (apt: libx11-dev libxext-dev, pacman: libx11 libxext)")
 if [[ -z "${JAVA_HOME:-}" || ! -x "${JAVA_HOME}/bin/jpackage" ]]; then
     command -v jpackage >/dev/null 2>&1 || missing+=("JDK 21 with jpackage (apt: openjdk-21-jdk, pacman: jdk21-openjdk)")
 fi
@@ -25,7 +27,7 @@ if [[ ${#missing[@]} -gt 0 ]]; then
     exit 1
 fi
 
-(cd "$PROJECT_ROOT" && ./gradlew :desktop:packageDesktop --no-daemon "$@")
+(cd "$PROJECT_ROOT" && ./gradlew :server:desktop:packageDesktop --no-daemon "$@")
 
 echo
 ls -lh "$PROJECT_ROOT"/artifacts/desktop/*.tar.xz

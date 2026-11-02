@@ -10,7 +10,7 @@
     msi      - Windows .msi installer
 
 .PARAMETER Clean
-    Runs :desktop:clean before building.
+    Runs :server:desktop:clean before building.
 
 .EXAMPLE
     .\scripts\build-desktop.ps1
@@ -28,7 +28,7 @@ $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $ArtifactsDir = Join-Path $ProjectRoot "artifacts\desktop"
-$BinariesDir = Join-Path $ProjectRoot "desktop\build\compose\binaries\main"
+$BinariesDir = Join-Path $ProjectRoot "server\desktop\build\compose\binaries\main"
 $PackageName = "Remote Controller Server"
 
 function Resolve-JavaHome {
@@ -120,18 +120,18 @@ New-Item -ItemType Directory -Force -Path $ArtifactsDir | Out-Null
 
 $tasks = @()
 if ($Clean) {
-    $tasks += ":desktop:clean"
+    $tasks += ":server:desktop:clean"
 }
 
 switch ($Target) {
-    "portable" { $tasks += ":desktop:createDistributable" }
-    "exe" { $tasks += ":desktop:packageExe" }
-    "msi" { $tasks += ":desktop:packageMsi" }
+    "portable" { $tasks += ":server:desktop:createDistributable" }
+    "exe" { $tasks += ":server:desktop:packageExe" }
+    "msi" { $tasks += ":server:desktop:packageMsi" }
     "all" {
         $tasks += @(
-            ":desktop:createDistributable",
-            ":desktop:packageExe",
-            ":desktop:packageMsi"
+            ":server:desktop:createDistributable",
+            ":server:desktop:packageExe",
+            ":server:desktop:packageMsi"
         )
     }
 }

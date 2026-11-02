@@ -1,0 +1,188 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-label="A TV shows a film. One phone is the remote, a second phone shows the same picture as the TV, and the laptop feeds the TV over HDMI.">
+  <title>Remote Controller: the laptop on the TV, the phone as the remote</title>
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2b2118"/>
+      <stop offset="0.55" stop-color="#1a1715"/>
+      <stop offset="1" stop-color="#0e0e10"/>
+    </linearGradient>
+    <radialGradient id="lamp" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffc27a" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#ffc27a" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="tvGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ff8a3c" stop-opacity="0.34"/>
+      <stop offset="0.65" stop-color="#7a3cff" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#7a3cff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sofa" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a342e"/>
+      <stop offset="1" stop-color="#1f1c19"/>
+    </linearGradient>
+    <linearGradient id="table" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a3424"/>
+      <stop offset="1" stop-color="#2a1d14"/>
+    </linearGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#160c3a"/>
+      <stop offset="0.42" stop-color="#7a1f6b"/>
+      <stop offset="0.72" stop-color="#ff6a3d"/>
+      <stop offset="1" stop-color="#ffc46b"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff2c4"/>
+      <stop offset="0.55" stop-color="#ffc25e"/>
+      <stop offset="1" stop-color="#ff7a3c" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="planet" cx="0.35" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#7fd6e6"/>
+      <stop offset="0.55" stop-color="#3a6ea8"/>
+      <stop offset="1" stop-color="#17234f"/>
+    </radialGradient>
+    <linearGradient id="trail" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.9"/>
+    </linearGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+    <clipPath id="frame"><rect width="640" height="360"/></clipPath>
+    <clipPath id="tvScreen"><rect x="430" y="44" width="760" height="427.5"/></clipPath>
+    <clipPath id="mirrorScreen"><rect x="0" y="0" width="330" height="185.6" rx="8"/></clipPath>
+
+    <!-- The film. The TV and the second phone draw this same symbol. -->
+    <symbol id="movie" viewBox="0 0 640 360">
+      <g clip-path="url(#frame)">
+        <rect width="640" height="360" fill="url(#sky)"/>
+        <g fill="#ffffff">
+          <circle cx="60" cy="40" r="1.2"/><circle cx="130" cy="72" r="1"/><circle cx="210" cy="30" r="1.4"/>
+          <circle cx="300" cy="58" r="1"/><circle cx="380" cy="34" r="1.2"/><circle cx="96" cy="108" r="0.9"/>
+          <circle cx="600" cy="46" r="1.1"/><circle cx="246" cy="96" r="0.8"/>
+        </g>
+        <circle cx="470" cy="108" r="62" fill="url(#planet)"/>
+        <ellipse cx="470" cy="108" rx="108" ry="19" fill="none" stroke="#ffe1b0" stroke-opacity="0.75" stroke-width="4" transform="rotate(-16 470 108)"/>
+        <circle cx="182" cy="226" r="112" fill="url(#sun)"/>
+        <path d="M70 92 L236 136" stroke="url(#trail)" stroke-width="2"/>
+        <path d="M236 136 l18 3 l-13 8 z" fill="#ffffff"/>
+        <path d="M0 262 C90 226 170 244 262 256 S430 224 640 250 V345 H0Z" fill="#a8452f"/>
+        <path d="M0 292 C120 256 236 300 340 284 S520 262 640 288 V345 H0Z" fill="#6b2a2b"/>
+        <path d="M0 326 C150 296 300 338 440 312 S580 306 640 318 V345 H0Z" fill="#2c1422"/>
+        <g fill="#100812">
+          <circle cx="402" cy="246" r="6.500"/>
+          <path d="M397 251 Q402 248 408 252 L416 292 Q424 306 432 314 L384 314 Q392 298 392 286 Z"/>
+          <path d="M418 236 L422 316" stroke="#100812" stroke-width="2.500" fill="none"/>
+        </g>
+        <rect width="640" height="20" fill="#000000"/>
+        <rect y="340" width="640" height="20" fill="#000000"/>
+        <rect x="524" y="300" width="96" height="27" rx="6" fill="#0e0e10" fill-opacity="0.72" stroke="#ffffff" stroke-opacity="0.5"/>
+        <text x="572" y="318" text-anchor="middle" font-size="13" font-weight="600" fill="#ffffff">Next episode</text>
+      </g>
+    </symbol>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#wall)"/>
+  <ellipse cx="120" cy="170" rx="250" ry="250" fill="url(#lamp)"/>
+  <ellipse cx="810" cy="280" rx="620" ry="400" fill="url(#tvGlow)"/>
+
+  <!-- TV unit -->
+  <rect x="330" y="530" width="950" height="60" fill="#1a1411"/>
+  <rect x="330" y="526" width="950" height="6" fill="#2d221a"/>
+  <rect x="790" y="490" width="36" height="24" fill="#0b0b0c"/>
+  <rect x="716" y="512" width="184" height="10" rx="4" fill="#0b0b0c"/>
+
+  <!-- TV -->
+  <rect x="418" y="32" width="784" height="452" rx="12" fill="#07070a"/>
+  <rect x="418" y="32" width="784" height="452" rx="12" fill="none" stroke="#2a2a30"/>
+  <use xlink:href="#movie" href="#movie" x="430" y="44" width="760" height="427.5"/>
+
+  <!-- HDMI cable and laptop -->
+  <path d="M1040 484 C1040 500 1046 506 1054 508" fill="none" stroke="#050506" stroke-width="7" stroke-linecap="round"/>
+  <path d="M840 660 h440 v60 h-470z" fill="url(#table)"/>
+  <g transform="translate(232 0)">
+    <path d="M702 646 l20 -2 h214 l20 2 l10 14 h-274z" fill="#2b2b30"/>
+    <path d="M700 660 h278 l-6 6 h-266z" fill="#17171a"/>
+    <rect x="722" y="508" width="214" height="136" rx="8" fill="#101013"/>
+    <rect x="729" y="515" width="200" height="122" rx="4" fill="#f4f4f5"/>
+    <text x="741" y="536" font-size="10.5" font-weight="700" fill="#141416">Remote Controller Server</text>
+    <circle cx="744" cy="551" r="3" fill="#2e7d32"/>
+    <text x="752" y="554" font-size="9" fill="#2e7d32">Running · 2 devices</text>
+    <text x="741" y="572" font-size="8" fill="#5e5e66">Address</text>
+    <text x="741" y="586" font-size="11.5" font-weight="700" fill="#141416">192.168.1.20:8765</text>
+    <text x="741" y="602" font-size="8" fill="#5e5e66">Screen</text>
+    <text x="741" y="616" font-size="10" font-weight="600" fill="#141416">60 fps · 2 viewers · H.264</text>
+  </g>
+
+  <!-- Sofa -->
+  <path d="M-20 720 V600 Q-20 560 26 556 L400 540 Q452 540 470 590 L500 720Z" fill="url(#sofa)"/>
+  <path d="M-20 720 V640 Q40 604 170 610 T444 660 L460 720Z" fill="#2c2722"/>
+
+  <!-- Phone 1: the remote -->
+  <g transform="translate(112 62)">
+    <rect x="10" y="18" width="282" height="590" rx="42" fill="#000000" opacity="0.5" filter="url(#soft)"/>
+    <rect width="282" height="596" rx="40" fill="#050506" stroke="#3a3a42" stroke-width="2"/>
+    <rect x="9" y="9" width="264" height="578" rx="32" fill="#0e0e10"/>
+    <rect x="124" y="19" width="34" height="9" rx="4.5" fill="#050506"/>
+
+    <rect x="22" y="44" width="238" height="42" rx="21" fill="#1b3d22"/>
+    <circle cx="40" cy="65" r="4.5" fill="#81c784"/>
+    <text x="52" y="61" font-size="11" font-weight="700" fill="#d8f3dc">Connected</text>
+    <text x="52" y="75" font-size="10" fill="#a9d6b0">Living room PC</text>
+    <g fill="#242428">
+      <circle cx="166" cy="65" r="15"/><circle cx="200" cy="65" r="15"/><circle cx="234" cy="65" r="15"/>
+    </g>
+    <g fill="none" stroke="#f4f4f5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="159" y="59" width="14" height="10" rx="1.5"/><path d="M163 73h6"/>
+      <circle cx="200" cy="65" r="3.2"/><path d="M200 57.5v2M200 70.5v2M192.5 65h2M205.5 65h2"/>
+      <path d="M228 60l12 10M232 65l-3 3a2 2 0 0 0 3 3M236 65l3-3a2 2 0 0 0-3-3"/>
+    </g>
+
+    <rect x="22" y="100" width="238" height="58" rx="18" fill="#18181b"/>
+    <g fill="#f4f4f5"><path d="M38 124h5l7-6v16l-7-6h-5z"/></g>
+    <rect x="62" y="126" width="146" height="4" rx="2" fill="#2e2e34"/>
+    <rect x="62" y="126" width="100" height="4" rx="2" fill="#81c784"/>
+    <circle cx="162" cy="128" r="9" fill="#81c784"/>
+    <text x="244" y="133" text-anchor="end" font-size="13" font-weight="600" fill="#f4f4f5">72%</text>
+
+    <g fill="none" stroke="#2e2e34" stroke-width="1.4">
+      <circle cx="46" cy="194" r="19" fill="#18181b"/><circle cx="92" cy="194" r="19" fill="#18181b"/>
+      <circle cx="190" cy="194" r="19" fill="#18181b"/><circle cx="236" cy="194" r="19" fill="#18181b"/>
+    </g>
+    <circle cx="141" cy="194" r="26" fill="#81c784"/>
+    <g fill="#f4f4f5">
+      <path d="M41 186h3v16h-3zM55 186v16l-10-8z"/>
+      <path d="M86 186h4.5v16H86zM93.500 186H98v16h-4.500z"/>
+      <path d="M182 186l10 8-10 8zM194 186h3v16h-3z"/>
+      <rect x="229" y="187" width="14" height="14" rx="1.5"/>
+    </g>
+    <path d="M134 181l20 13-20 13z" fill="#0c1f10"/>
+
+    <rect x="22" y="232" width="196" height="264" rx="20" fill="#1b3d22"/>
+    <g fill="#81c784" fill-opacity="0.32">
+      <circle cx="60" cy="280" r="1.7"/><circle cx="90" cy="280" r="1.7"/><circle cx="120" cy="280" r="1.7"/><circle cx="150" cy="280" r="1.7"/><circle cx="180" cy="280" r="1.7"/>
+      <circle cx="60" cy="310" r="1.7"/><circle cx="90" cy="310" r="1.7"/><circle cx="120" cy="310" r="1.7"/><circle cx="150" cy="310" r="1.7"/><circle cx="180" cy="310" r="1.7"/>
+      <circle cx="60" cy="340" r="1.7"/><circle cx="90" cy="340" r="1.7"/><circle cx="120" cy="340" r="1.7"/><circle cx="150" cy="340" r="1.7"/><circle cx="180" cy="340" r="1.7"/>
+      <circle cx="60" cy="370" r="1.7"/><circle cx="90" cy="370" r="1.7"/><circle cx="120" cy="370" r="1.7"/><circle cx="150" cy="370" r="1.7"/><circle cx="180" cy="370" r="1.7"/>
+    </g>
+    <text x="120" y="440" text-anchor="middle" font-size="13" font-weight="600" fill="#d8f3dc">Mouse pad</text>
+    <rect x="226" y="232" width="34" height="264" rx="17" fill="#242428"/>
+    <text x="243" y="368" text-anchor="middle" font-size="9.500" fill="#a1a1aa" transform="rotate(-90 243 364)">Scroll</text>
+
+    <rect x="22" y="508" width="238" height="40" rx="20" fill="#18181b" stroke="#2e2e34"/>
+    <text x="42" y="533" font-size="12" fill="#a1a1aa">Type on the PC</text>
+    <rect x="102" y="564" width="78" height="4" rx="2" fill="#5e5e66"/>
+  </g>
+
+  <!-- Phone 2: the same picture as the TV -->
+  <g transform="translate(450 500) rotate(-3)">
+    <rect x="8" y="14" width="346" height="196" rx="30" fill="#000000" opacity="0.6" filter="url(#soft)"/>
+    <rect x="-16" y="-14" width="362" height="214" rx="30" fill="#050506" stroke="#3a3a42" stroke-width="2"/>
+    <g clip-path="url(#mirrorScreen)">
+      <use xlink:href="#movie" href="#movie" x="0" y="0" width="330" height="185.6"/>
+    </g>
+    <rect x="86" y="8" width="158" height="30" rx="15" fill="#000000" fill-opacity="0.6"/>
+    <path d="M108 23h-11m5-5l-5 5 5 5" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="122" y="28" font-size="11.500" font-weight="600" fill="#ffffff">60 fps</text>
+    <rect x="170" y="14" width="62" height="18" rx="6" fill="none" stroke="#ffffff" stroke-opacity="0.6"/>
+    <text x="201" y="27" text-anchor="middle" font-size="10.500" fill="#ffffff">Touch</text>
+  </g>
+</svg>

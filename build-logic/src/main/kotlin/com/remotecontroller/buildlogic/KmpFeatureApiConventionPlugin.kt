@@ -11,7 +11,7 @@ class KmpFeatureApiConventionPlugin : Plugin<Project> {
         extensions.configure<KotlinMultiplatformExtension> {
             sourceSets.named("commonMain") {
                 dependencies {
-                    api(project(":client:core"))
+                    api(project(":client:kmp:core"))
                 }
             }
         }
