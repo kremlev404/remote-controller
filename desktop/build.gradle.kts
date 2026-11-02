@@ -33,6 +33,15 @@ kotlin {
     jvmToolchain(21)
 }
 
+// Compose's folder for this OS inside appResources. Also where a Gradle run loads the library from.
+val screencastFolder = System.getProperty("os.name").lowercase().let { name ->
+    when {
+        name.contains("win") -> "windows"
+        name.contains("mac") -> "macos"
+        else -> "linux"
+    }
+}
+
 tasks.withType<JavaExec>().configureEach {
     jvmArgs(
         "--enable-native-access=ALL-UNNAMED",
@@ -41,7 +50,7 @@ tasks.withType<JavaExec>().configureEach {
     )
     // The IDE starts MainKt with its own JavaExec task, which Compose knows nothing about.
     dependsOn("collectScreencast")
-    systemProperty("screencast.library.dir", layout.buildDirectory.dir("appResources/windows").get().asFile.absolutePath)
+    systemProperty("screencast.library.dir", layout.buildDirectory.dir("appResources/$screencastFolder").get().asFile.absolutePath)
 }
 
 // Netty pulls QUIC/HTTP3 native libraries for five platforms (~11 MB). The server speaks HTTP/1.1 only.
@@ -466,13 +475,12 @@ tasks.named("compileKotlin").configure {
     dependsOn(generateAppVersion)
 }
 
-// screencast.dll goes in the app's resources folder, next to the runtime, and loads from there by full path.
+// The screencast library goes in the app's resources folder, next to the runtime, and loads from there by full path.
 val collectScreencast = tasks.register<Sync>("collectScreencast") {
     group = "build"
-    description = "Copy screencast.dll into the app resources"
-    onlyIf { desktopIsWindows }
+    description = "Copy the screencast library into the app resources"
     from(screencastLibrary)
-    into(layout.buildDirectory.dir("appResources/windows"))
+    into(layout.buildDirectory.dir("appResources/$screencastFolder"))
 }
 
 tasks.matching { it.name == "prepareAppResources" }.configureEach {

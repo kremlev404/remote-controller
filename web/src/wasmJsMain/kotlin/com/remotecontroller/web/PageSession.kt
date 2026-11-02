@@ -61,7 +61,7 @@ data class PageTarget(
     }
 }
 
-/** A JPEG the page draws itself, or video the player paints behind the page. */
+/** A JPEG the page draws itself, or the video or tiles the player paints behind the page. */
 sealed interface ScreenPicture {
     val width: Int
     val height: Int
@@ -371,7 +371,7 @@ class PageSession(
             },
             onReady = { cipher ->
                 streamCipher = cipher
-                val codecs = if (canPlayVideo()) listOf(ScreenCodec.H264) else emptyList()
+                val codecs = if (canPlayVideo()) listOf(ScreenCodec.H264, ScreenCodec.TILES) else listOf(ScreenCodec.TILES)
                 sendStream(ScreenSignal.viewer(codecs))
             },
         )
@@ -405,6 +405,10 @@ class PageSession(
         val video = ScreenFrame.unpackVideo(packet)
         if (video != null) {
             videoPlayer().decode(Base64.encode(video.data), video.keyframe)
+            return
+        }
+        if (ScreenFrame.isTiles(packet)) {
+            videoPlayer().paintTiles(Base64.encode(packet))
             return
         }
         val still = ScreenFrame.unpack(packet) ?: return

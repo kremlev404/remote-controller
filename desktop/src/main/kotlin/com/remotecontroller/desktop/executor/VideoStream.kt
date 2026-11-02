@@ -3,9 +3,7 @@ package com.remotecontroller.desktop.executor
 import com.remotecontroller.desktop.server.DesktopSettings
 import com.remotecontroller.desktop.server.ScreenMode
 import com.remotecontroller.desktop.server.SecureFrames
-import com.remotecontroller.host.screencast.Screencast
-import com.remotecontroller.host.screencast.ScreencastResult
-import com.remotecontroller.shared.network.ScreenFrame
+import com.remotecontroller.desktop.server.ServerLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -23,14 +21,15 @@ import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
 /**
- * The H.264 stream: screencast.dll captures and encodes on the GPU, this class hands the bytes
- * to the viewers and keeps the load matched to what they can take.
+ * A stream of frames from a [StreamSource]: this class hands the bytes to the viewers and keeps the
+ * load matched to what they can take.
  *
  * Frames depend on the ones before them, so a sent stream cannot skip one. The brake sits before
  * the encoder instead: while a viewer's socket is busy, nothing is captured. A viewer that falls
  * behind others waits for a keyframe, and a slow link lowers the bitrate.
  */
 internal class VideoStream(
+    private val source: StreamSource,
     private val settings: DesktopSettings,
     private val scope: CoroutineScope,
     private val displayIndex: () -> Int,
@@ -38,7 +37,7 @@ internal class VideoStream(
     private val onFrame: (delivered: Boolean) -> Unit,
     private val onStopped: () -> Unit,
     private val onFailure: (String?) -> Unit,
-    /** The GPU route never worked. These viewers go back to JPEG. */
+    /** This route never worked. These viewers need another one. */
     private val onUnavailable: (List<String>) -> Unit,
 ) {
     val live: StateFlow<Boolean>
@@ -50,7 +49,7 @@ internal class VideoStream(
 
     // The native session belongs to one thread. Every call into it happens on this one.
     private val encodeDispatcher = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "screen-encode").apply { isDaemon = true }
+        Thread(runnable, "screen-encode-${source.name}").apply { isDaemon = true }
     }.asCoroutineDispatcher()
     private var job: Job? = null
     private var sequence = 0
@@ -64,11 +63,14 @@ internal class VideoStream(
     @Volatile
     private var broken = false
 
+    @Volatile
+    private var brokenReason: String? = null
+
     val canStream: Boolean
-        get() = Screencast.isAvailable && !broken
+        get() = source.unavailableReason == null && !broken
 
     val unavailableReason: String
-        get() = Screencast.unavailableReason ?: "the screen encoder failed on this PC"
+        get() = source.unavailableReason ?: brokenReason ?: "${source.name} failed on this PC"
 
     fun add(endpoint: String) {
         synchronized(lock) {
@@ -85,14 +87,24 @@ internal class VideoStream(
         true
     }
 
-    /** A viewer's decoder lost the picture. A peer cannot use this to make the GPU work flat out. */
+    /** A viewer's decoder lost the picture. It waits for this answer, so a request is only ever delayed. */
     fun requestKeyframe(endpoint: String) {
         synchronized(lock) {
-            val viewer = viewers[endpoint] ?: return
-            if (viewer.lastRequest?.let { it.elapsedNow() < KEYFRAME_REQUEST_GAP } == true) return
-            viewer.lastRequest = clock.markNow()
-            viewer.awaitingKeyframe = true
-            keyframeWanted = true
+            viewers[endpoint]?.keyframeAsked = true
+        }
+    }
+
+    /** At most one per viewer per [KEYFRAME_REQUEST_GAP]: a peer cannot use this to make the GPU work flat out. */
+    private fun grantKeyframes() {
+        synchronized(lock) {
+            for (viewer in viewers.values) {
+                if (!viewer.keyframeAsked) continue
+                if (viewer.lastRequest?.let { it.elapsedNow() < KEYFRAME_REQUEST_GAP } == true) continue
+                viewer.keyframeAsked = false
+                viewer.lastRequest = clock.markNow()
+                viewer.awaitingKeyframe = true
+                keyframeWanted = true
+            }
         }
     }
 
@@ -139,7 +151,7 @@ internal class VideoStream(
         try {
             while (currentCoroutineContext().isActive && hasViewers()) {
                 val wanted = currentConfig()
-                val session = Screencast.open(wanted.display, wanted.mode.longEdge, wanted.mode.framesPerSecond, wanted.mode.bitrate)
+                val session = source.open(wanted.display, wanted.mode)
                 if (session == null) {
                     giveUp("The screen encoder could not start")
                     return
@@ -156,8 +168,8 @@ internal class VideoStream(
 
     private fun currentConfig() = StreamConfig(settings.screenMode.value, displayIndex())
 
-    /** Runs until the mode or the display changes. False when the GPU route cannot work here. */
-    private suspend fun stream(session: Screencast, config: StreamConfig): Boolean {
+    /** Runs until the mode or the display changes. False when this route cannot work here. */
+    private suspend fun stream(session: StreamSession, config: StreamConfig): Boolean {
         val governor = BitrateGovernor(config.mode.bitrate)
         val interval = config.mode.frameInterval
         val opened = clock.markNow()
@@ -171,14 +183,25 @@ internal class VideoStream(
             while (allBusy()) delay(SEND_POLL)
             governor.note(congested = waitStart.elapsedNow() > interval)
 
+            grantKeyframes()
             val keyframe = keyframeWanted
             keyframeWanted = false
             when (val result = session.next(keyframe, governor.bitrate)) {
-                ScreencastResult.Unchanged -> {
+                StreamFrame.Unchanged -> {
                     if (keyframe) keyframeWanted = true
                     onFrame(false)
                 }
-                ScreencastResult.Unavailable -> {
+                StreamFrame.Failed -> {
+                    giveUp(session.status())
+                    return false
+                }
+                StreamFrame.NeedsAccess -> {
+                    keyframeWanted = true
+                    live.value = false
+                    outageStart = outageStart ?: clock.markNow()
+                    onFailure("Allow Screen Recording for this app, then start the app again")
+                }
+                StreamFrame.Unavailable -> {
                     keyframeWanted = true
                     live.value = false
                     val since = outageStart ?: clock.markNow().also { outageStart = it }
@@ -188,7 +211,7 @@ internal class VideoStream(
                     }
                     if (since.elapsedNow() > OUTAGE_REPORT_AFTER) onFailure("The desktop is not available right now")
                 }
-                is ScreencastResult.Encoded -> {
+                is StreamFrame.Encoded -> {
                     if (outageStart != null) {
                         outageStart = null
                         onFailure(null)
@@ -203,7 +226,9 @@ internal class VideoStream(
     }
 
     private fun giveUp(reason: String) {
-        println("[VideoStream] falling back to JPEG: $reason")
+        ServerLog.record("${source.name} stream stopped: $reason", error = true)
+        println("[VideoStream] ${source.name} stream stopped: $reason")
+        brokenReason = reason
         broken = true
         val endpoints = synchronized(lock) {
             viewers.keys.toList().also { viewers.clear() }
@@ -211,10 +236,8 @@ internal class VideoStream(
         if (endpoints.isNotEmpty()) onUnavailable(endpoints)
     }
 
-    private fun deliver(result: ScreencastResult.Encoded) {
-        val size = result.annexB.remaining()
-        val packet = ScreenFrame.videoPacket(result.width, result.height, sequence, result.keyframe, size)
-        result.annexB.get(packet, ScreenFrame.HEADER_SIZE, size)
+    private fun deliver(result: StreamFrame.Encoded) {
+        val packet = result.pack(sequence)
         sequence = (sequence + 1) and Int.MAX_VALUE
         var sent = false
         synchronized(lock) {
@@ -269,6 +292,7 @@ internal class VideoStream(
     ) {
         var send: Job? = null
         var awaitingKeyframe = true
+        var keyframeAsked = false
         var lastRequest: TimeMark? = null
         var lastResync: TimeMark? = null
     }

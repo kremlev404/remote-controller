@@ -26,6 +26,27 @@ enum class ScreenMode(
     }
 }
 
+/**
+ * How the picture travels. The user picks where to start; what a viewer or this PC cannot do falls
+ * to the next one down, so an old viewer is never left without a picture.
+ */
+enum class ScreenEngine(
+    val label: String,
+    val hint: String,
+) {
+    H264("H.264", "Best picture, lowest load"),
+    TILES("Tiles", "Only what changed, no video codec needed"),
+    JPEG("JPEG", "The original stream, whole pictures");
+
+    /** This engine and everything below it, best first. */
+    val fallbacks: List<ScreenEngine>
+        get() = entries.drop(ordinal)
+
+    companion object {
+        fun fromStored(value: String?): ScreenEngine = entries.firstOrNull { it.name == value } ?: H264
+    }
+}
+
 /** Settings that survive a restart. Stored in the user's Java preferences. */
 class DesktopSettings {
     private val prefs = Preferences.userRoot().node("com/remotecontroller/desktop")
@@ -41,6 +62,9 @@ class DesktopSettings {
 
     val screenMode: StateFlow<ScreenMode>
         field = MutableStateFlow(ScreenMode.fromStored(prefs.get(KEY_SCREEN_MODE, null)))
+
+    val screenEngine: StateFlow<ScreenEngine>
+        field = MutableStateFlow(ScreenEngine.fromStored(prefs.get(KEY_SCREEN_ENGINE, null)))
 
     /** Null until the user picks one: the window then follows the system. */
     val darkTheme: StateFlow<Boolean?>
@@ -72,6 +96,11 @@ class DesktopSettings {
         screenMode.value = mode
     }
 
+    fun setScreenEngine(engine: ScreenEngine) {
+        prefs.put(KEY_SCREEN_ENGINE, engine.name)
+        screenEngine.value = engine
+    }
+
     fun setDarkTheme(dark: Boolean) {
         prefs.putBoolean(KEY_DARK_THEME, dark)
         darkTheme.value = dark
@@ -82,6 +111,7 @@ class DesktopSettings {
         const val KEY_RELAY_ENABLED = "relayEnabled"
         const val KEY_RELAY_URL = "relayUrl"
         const val KEY_SCREEN_MODE = "screenMode"
+        const val KEY_SCREEN_ENGINE = "screenEngine"
         const val KEY_DARK_THEME = "darkTheme"
         const val KEY_PC_ID = "pcId"
         const val DEFAULT_RELAY_URL = ""

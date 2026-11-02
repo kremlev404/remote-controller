@@ -29,4 +29,4 @@ Goal: 60 fps at 1080p, light on the PC.
 | CPU time per frame | 32.1 ms | 2.8 ms | −91% |
 | CPU on a still screen | not measured | under 1%, 0 frames | |
 
-iOS and macOS and Linux PCs stay on JPEG.
+macOS and Linux PCs followed in [002](002-streaming-on-macos-and-linux.md). iOS gets tiles from there too.

@@ -9,7 +9,7 @@ import com.remotecontroller.shared.network.ScreenCodec
 import com.remotecontroller.shared.network.ScreenFrame
 import kotlinx.coroutines.channels.ReceiveChannel
 
-internal actual val videoCodecs: List<String> = listOf(ScreenCodec.H264)
+internal actual val videoCodecs: List<String> = listOf(ScreenCodec.H264, ScreenCodec.TILES)
 
 /** A SurfaceView: frames go straight from the decoder to the display, past Compose. */
 @Composable

@@ -8,19 +8,21 @@ import kotlin.js.js
 
 external interface VideoPlayer : JsAny {
     fun decode(base64: String, keyframe: Boolean)
+    fun paintTiles(base64: String)
     fun place(left: Double, top: Double, width: Double, height: Double)
     fun reset()
     fun close()
 }
 
-/** WebCodecs needs a secure page: true on https, and in every browser of the last few years. */
+/** WebCodecs needs a secure page: true on https, and in every browser of the last few years. Tiles do not. */
 fun canPlayVideo(): Boolean = js("typeof VideoDecoder === 'function' && window.isSecureContext === true")
 
 /**
- * Plays H.264 with the browser's hardware decoder, onto a canvas behind the Compose page. The page
+ * Plays H.264 with the browser's decoder, onto a canvas behind the Compose page. The page
  * leaves a clear hole over it, so its buttons stay on top and clicks still reach Compose.
  * Only the newest frame is painted, once per display refresh. [onLost] asks for a new keyframe:
  * frames depend on each other, so after a gap nothing can be shown until one arrives.
+ * A tile stream paints onto the same canvas: each packet's parts land together, in order.
  */
 fun openVideoPlayer(
     onShown: (Int, Int) -> Unit,
@@ -30,6 +32,9 @@ fun openVideoPlayer(
     (() => {
       const MAX_QUEUE = 8;
       const FRAME_MICROS = 16667;
+      const MAX_TILE_PACKETS = 8;
+      const TILES_START = 12;
+      const TILE_HEADER = 12;
       const canvas = document.createElement('canvas');
       canvas.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;z-index:0;pointer-events:none';
       document.body.appendChild(canvas);
@@ -40,6 +45,10 @@ fun openVideoPlayer(
       let timestamp = 0;
       let latest = null;
       let painting = false;
+      let awaitingTiles = true;
+      let tilePackets = 0;
+      let tileEpoch = 0;
+      let tileTail = Promise.resolve();
 
       const paint = () => {
         painting = false;
@@ -102,7 +111,8 @@ fun openVideoPlayer(
             const wanted = codecOf(bytes);
             if (wanted && wanted !== codec) {
               if (!decoder) decoder = open();
-              decoder.configure({ codec: wanted, optimizeForLatency: true, hardwareAcceleration: 'prefer-hardware' });
+              // The browser still takes the hardware path when it has one. Asking for it outright fails where it has none.
+              decoder.configure({ codec: wanted, optimizeForLatency: true });
               codec = wanted;
             }
             awaitingKey = false;
@@ -115,6 +125,47 @@ fun openVideoPlayer(
           timestamp += FRAME_MICROS;
           decoder.decode(new EncodedVideoChunk({ type: keyframe ? 'key' : 'delta', timestamp: timestamp, data: bytes }));
         },
+        paintTiles: (base64) => {
+          const bytes = bytesOf(base64);
+          const keyframe = (bytes[1] & 1) !== 0;
+          if (awaitingTiles && !keyframe) return;
+          if (tilePackets >= MAX_TILE_PACKETS) {
+            awaitingTiles = true;
+            onLost();
+            return;
+          }
+          awaitingTiles = false;
+          tilePackets++;
+          const view = new DataView(bytes.buffer);
+          const width = view.getUint16(2);
+          const height = view.getUint16(4);
+          const parts = [];
+          let offset = TILES_START;
+          for (let i = view.getUint16(10); i > 0; i--) {
+            const x = view.getUint16(offset);
+            const y = view.getUint16(offset + 2);
+            const size = view.getUint32(offset + 8);
+            const start = offset + TILE_HEADER;
+            const blob = new Blob([bytes.subarray(start, start + size)], { type: 'image/jpeg' });
+            parts.push(createImageBitmap(blob).then((image) => ({ x, y, image })));
+            offset = start + size;
+          }
+          const epoch = tileEpoch;
+          tileTail = tileTail.then(() => Promise.all(parts)).then((images) => {
+            tilePackets--;
+            if (epoch === tileEpoch) {
+              if (canvas.width !== width) canvas.width = width;
+              if (canvas.height !== height) canvas.height = height;
+              for (const part of images) paper.drawImage(part.image, part.x, part.y);
+            }
+            for (const part of images) part.image.close();
+            if (epoch === tileEpoch) onShown(width, height);
+          }).catch(() => {
+            tilePackets--;
+            awaitingTiles = true;
+            onLost();
+          });
+        },
         place: (left, top, width, height) => {
           canvas.style.left = left + 'px';
           canvas.style.top = top + 'px';
@@ -123,11 +174,14 @@ fun openVideoPlayer(
         },
         reset: () => {
           awaitingKey = true;
+          awaitingTiles = true;
+          tileEpoch++;
           if (decoder && decoder.state !== 'closed') decoder.close();
           decoder = null;
           codec = '';
         },
         close: () => {
+          tileEpoch++;
           if (decoder && decoder.state !== 'closed') decoder.close();
           if (latest) latest.close();
           decoder = null;

@@ -63,6 +63,7 @@ import com.remotecontroller.desktop.server.ConnectedClient
 import com.remotecontroller.desktop.server.RelayState
 import com.remotecontroller.shared.network.RelayProtocol
 import com.remotecontroller.desktop.AppVersion
+import com.remotecontroller.desktop.server.ScreenEngine
 import com.remotecontroller.desktop.server.ScreenMode
 import com.remotecontroller.desktop.server.ServerLogLine
 import org.koin.compose.viewmodel.koinViewModel
@@ -102,12 +103,14 @@ fun DesktopApp(viewModel: DesktopViewModel = koinViewModel()) {
                     paused = uiState.streamPaused,
                     streamError = uiState.streamError,
                     screenMode = uiState.screenMode,
+                    screenEngine = uiState.screenEngine,
                     inputBlocked = uiState.inputBlocked,
                     onAllowInput = viewModel::allowInput,
                     rememberedDevices = uiState.rememberedDevices,
                     onForgetDevices = viewModel::forgetDevices,
                     onSelectDisplay = viewModel::selectDisplay,
                     onSelectScreenMode = viewModel::setScreenMode,
+                    onSelectScreenEngine = viewModel::setScreenEngine,
                     onStartSharing = viewModel::resumeSharing,
                     onStopSharing = viewModel::pauseSharing,
                     onRestartSharing = viewModel::restartSharing,
@@ -118,15 +121,6 @@ fun DesktopApp(viewModel: DesktopViewModel = koinViewModel()) {
                     onRequireCode = viewModel::setRequireCode,
                     certificateFingerprint = viewModel.certificateFingerprint,
                     onTrustCertificate = viewModel::trustCertificate,
-                )
-
-                RelayCard(
-                    enabled = uiState.relayEnabled,
-                    url = uiState.relayUrl,
-                    state = uiState.relayState,
-                    requireCode = uiState.requireCode,
-                    onEnabledChange = viewModel::setRelayEnabled,
-                    onUrlChange = viewModel::setRelayUrl,
                 )
 
                 ClipboardCard(
@@ -143,6 +137,15 @@ fun DesktopApp(viewModel: DesktopViewModel = koinViewModel()) {
                     onClear = viewModel::clearClipHistory,
                     onSharingChange = viewModel::setShareClipboard,
                     onOpenPage = viewModel::openClipPage,
+                )
+
+                RelayCard(
+                    enabled = uiState.relayEnabled,
+                    url = uiState.relayUrl,
+                    state = uiState.relayState,
+                    requireCode = uiState.requireCode,
+                    onEnabledChange = viewModel::setRelayEnabled,
+                    onUrlChange = viewModel::setRelayUrl,
                 )
 
                 StatusCard(uiState)
@@ -399,12 +402,14 @@ private fun ServerStatusCard(
     paused: Boolean,
     streamError: String?,
     screenMode: ScreenMode,
+    screenEngine: ScreenEngine,
     inputBlocked: Boolean,
     onAllowInput: () -> Unit,
     rememberedDevices: List<String>,
     onForgetDevices: () -> Unit,
     onSelectDisplay: (String) -> Unit,
     onSelectScreenMode: (ScreenMode) -> Unit,
+    onSelectScreenEngine: (ScreenEngine) -> Unit,
     onStartSharing: () -> Unit,
     onStopSharing: () -> Unit,
     onRestartSharing: () -> Unit,
@@ -491,11 +496,6 @@ private fun ServerStatusCard(
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
-                    Text(
-                        text = "Type this on the phone or in the browser. It is created when this window starts.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             } else {
                 Text(
@@ -569,8 +569,10 @@ private fun ServerStatusCard(
                 paused = paused,
                 errorMessage = streamError,
                 mode = screenMode,
+                engine = screenEngine,
                 onSelect = onSelectDisplay,
                 onSelectMode = onSelectScreenMode,
+                onSelectEngine = onSelectScreenEngine,
                 onStart = onStartSharing,
                 onStop = onStopSharing,
                 onRestart = onRestartSharing,
@@ -926,8 +928,10 @@ private fun ScreenShareRow(
     paused: Boolean,
     errorMessage: String?,
     mode: ScreenMode,
+    engine: ScreenEngine,
     onSelect: (String) -> Unit,
     onSelectMode: (ScreenMode) -> Unit,
+    onSelectEngine: (ScreenEngine) -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onRestart: () -> Unit,
@@ -974,10 +978,11 @@ private fun ScreenShareRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            FilledTonalButton(onClick = onStart, enabled = paused) { Text("Start") }
-            OutlinedButton(onClick = onStop, enabled = !paused) { Text("Stop") }
-            OutlinedButton(onClick = onRestart) { Text("Restart") }
+            FilledTonalButton(onClick = onStart, enabled = paused, contentPadding = ScreenButtonPadding) { Text("Start") }
+            OutlinedButton(onClick = onStop, enabled = !paused, contentPadding = ScreenButtonPadding) { Text("Stop") }
+            OutlinedButton(onClick = onRestart, contentPadding = ScreenButtonPadding) { Text("Restart") }
             ScreenModeMenu(mode = mode, onSelect = onSelectMode)
+            ScreenEngineMenu(engine = engine, onSelect = onSelectEngine)
             if (needsAccess) {
                 TextButton(onClick = onGrant) { Text("Allow access") }
             }
@@ -999,6 +1004,10 @@ private fun ScreenShareRow(
     }
 }
 
+// Tight enough for all the Screen buttons to share one line in the default window.
+private val ScreenButtonPadding = PaddingValues(horizontal = 12.dp)
+private val ScreenMenuPadding = PaddingValues(start = 12.dp, end = 4.dp)
+
 @Composable
 private fun ScreenModeMenu(
     mode: ScreenMode,
@@ -1008,7 +1017,7 @@ private fun ScreenModeMenu(
     Box {
         OutlinedButton(
             onClick = { open = true },
-            contentPadding = PaddingValues(start = 16.dp, end = 8.dp),
+            contentPadding = ScreenMenuPadding,
         ) {
             Text("${mode.framesPerSecond} fps")
             Icon(imageVector = DesktopIcons.ArrowDropDown, contentDescription = "Frame rate")
@@ -1017,6 +1026,34 @@ private fun ScreenModeMenu(
             ScreenMode.entries.forEach { option ->
                 DropdownMenuItem(
                     text = { Text("${option.label} · ${option.framesPerSecond} fps") },
+                    onClick = {
+                        onSelect(option)
+                        open = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScreenEngineMenu(
+    engine: ScreenEngine,
+    onSelect: (ScreenEngine) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(
+            onClick = { open = true },
+            contentPadding = ScreenMenuPadding,
+        ) {
+            Text(engine.label)
+            Icon(imageVector = DesktopIcons.ArrowDropDown, contentDescription = "Stream type")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            ScreenEngine.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text("${option.label} · ${option.hint}") },
                     onClick = {
                         onSelect(option)
                         open = false

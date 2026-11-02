@@ -5,6 +5,7 @@ Short records of technical experiments: how it was, what we did, how it is now.
 | No. | Experiment | Result |
 |---|---|---|
 | [001](001-windows-screen-streaming.md) | Windows screen streaming | From 19 fps at 720p to 60 fps at 1080p, with 72% less CPU |
+| [002](002-streaming-on-macos-and-linux.md) | Streaming on macOS and Linux | H.264 on both, plus a tile stream at 60 fps where H.264 is out of reach. macOS not measured yet |
 
 ## Adding an experiment
 

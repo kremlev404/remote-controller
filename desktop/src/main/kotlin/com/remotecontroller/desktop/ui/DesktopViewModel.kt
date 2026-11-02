@@ -13,6 +13,7 @@ import com.remotecontroller.desktop.server.ConnectionApprovals
 import com.remotecontroller.desktop.server.DesktopSettings
 import com.remotecontroller.desktop.server.RelayLink
 import com.remotecontroller.desktop.server.RelayState
+import com.remotecontroller.desktop.server.ScreenEngine
 import com.remotecontroller.desktop.server.ScreenMode
 import com.remotecontroller.desktop.server.ServerLog
 import com.remotecontroller.desktop.server.ServerLogLine
@@ -57,6 +58,7 @@ data class DesktopUiState(
     val streamPaused: Boolean = false,
     val streamError: String? = null,
     val screenMode: ScreenMode = ScreenMode.BALANCED,
+    val screenEngine: ScreenEngine = ScreenEngine.H264,
     val darkTheme: Boolean? = null,
     val inputBlocked: Boolean = false,
     val rememberedDevices: List<String> = emptyList(),
@@ -103,6 +105,7 @@ class DesktopViewModel(
             streamViewers = screenCapturer.viewerCount.value,
             streamError = screenCapturer.captureError.value,
             screenMode = settings.screenMode.value,
+            screenEngine = settings.screenEngine.value,
             darkTheme = settings.darkTheme.value,
         )
 
@@ -203,6 +206,12 @@ class DesktopViewModel(
         }
 
         viewModelScope.launch {
+            settings.screenEngine.collect { engine ->
+                uiState.update { it.copy(screenEngine = engine) }
+            }
+        }
+
+        viewModelScope.launch {
             settings.darkTheme.collect { dark ->
                 uiState.update { it.copy(darkTheme = dark) }
             }
@@ -292,6 +301,10 @@ class DesktopViewModel(
 
     fun setScreenMode(mode: ScreenMode) {
         settings.setScreenMode(mode)
+    }
+
+    fun setScreenEngine(engine: ScreenEngine) {
+        settings.setScreenEngine(engine)
     }
 
     fun setDarkTheme(dark: Boolean) {

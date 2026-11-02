@@ -5,7 +5,7 @@ import androidx.compose.ui.Modifier
 import com.remotecontroller.shared.network.ScreenFrame
 import kotlinx.coroutines.channels.ReceiveChannel
 
-/** The video this device can decode in hardware. Empty means the PC sends JPEG. */
+/** The streams this device can play, H.264 only where it has a hardware decoder. Empty means the PC sends JPEG. */
 internal expect val videoCodecs: List<String>
 
 /**

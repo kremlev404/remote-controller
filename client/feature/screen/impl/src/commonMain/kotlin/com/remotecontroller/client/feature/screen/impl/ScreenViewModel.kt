@@ -47,6 +47,9 @@ data class VideoSize(
 data class ScreenUiState(
     val image: ImageBitmap? = null,
     val video: VideoSize? = null,
+    /** The picture of a tile stream. It is painted in place, so [boardVersion] says when it changed. */
+    val board: ImageBitmap? = null,
+    val boardVersion: Int = 0,
     val framesPerSecond: Int = 0,
     val message: String? = "Connecting to the screen…",
     val connectionState: ConnectionState = ConnectionState.Disconnected,
@@ -56,7 +59,7 @@ data class ScreenUiState(
     val cursorY: Float = 0.5f,
 ) {
     val hasPicture: Boolean
-        get() = image != null || video != null
+        get() = image != null || video != null || board != null
 }
 
 class ScreenViewModel(
@@ -83,6 +86,10 @@ class ScreenViewModel(
         onBufferOverflow = BufferOverflow.DROP_LATEST,
     )
     private val latestPicture = MutableStateFlow<ScreenFrame.Picture?>(null)
+    private val tileChannel = Channel<ScreenFrame.Tiles>(capacity = VIDEO_BACKLOG)
+    private val tileCanvas = TileCanvas()
+    // decodeJpeg keeps its buffers between calls, so pictures and tiles take turns.
+    private val decodeDispatcher = Dispatchers.Default.limitedParallelism(1)
 
     val videoFrames: ReceiveChannel<ScreenFrame.Video>
         get() = videoChannel
@@ -124,10 +131,30 @@ class ScreenViewModel(
         viewModelScope.launch {
             // A StateFlow keeps only the newest, so a slow phone skips JPEG frames, never queues them.
             latestPicture.filterNotNull().collect { picture ->
-                val image = withContext(Dispatchers.Default) { decodeJpeg(picture.jpeg) } ?: return@collect
+                val image = withContext(decodeDispatcher) { decodeJpeg(picture.jpeg) } ?: return@collect
                 val fps = noteFrame()
                 uiState.update {
-                    it.copy(image = image, video = null, framesPerSecond = fps, message = null)
+                    it.copy(image = image, video = null, board = null, framesPerSecond = fps, message = null)
+                }
+            }
+        }
+        viewModelScope.launch {
+            for (frame in tileChannel) {
+                val painted = withContext(decodeDispatcher) { tileCanvas.paint(frame) }
+                if (!painted) {
+                    videoLost()
+                    continue
+                }
+                val fps = noteFrame()
+                uiState.update {
+                    it.copy(
+                        image = null,
+                        video = null,
+                        board = tileCanvas.bitmap,
+                        boardVersion = it.boardVersion + 1,
+                        framesPerSecond = fps,
+                        message = null,
+                    )
                 }
             }
         }
@@ -228,6 +255,7 @@ class ScreenViewModel(
         releasePointer()
         pointerEvents.close()
         videoChannel.close()
+        tileChannel.close()
     }
 
     private suspend fun stream(connection: PcConnection) {
@@ -244,6 +272,7 @@ class ScreenViewModel(
                             it.copy(
                                 image = null,
                                 video = null,
+                                board = null,
                                 framesPerSecond = 0,
                                 message = "Screen sharing is paused on the PC",
                             )
@@ -251,6 +280,7 @@ class ScreenViewModel(
                         ScreenFeed.HostLive -> uiState.update { it.copy(message = "Connecting to the screen…") }
                         is ScreenFeed.Picture -> latestPicture.value = feed.picture
                         is ScreenFeed.Video -> showVideo(feed.video)
+                        is ScreenFeed.Tiles -> showTiles(feed.tiles)
                     }
                 }
                 streak++
@@ -271,7 +301,15 @@ class ScreenViewModel(
         videoChannel.trySend(video)
         val size = VideoSize(video.width, video.height)
         if (uiState.value.video != size) {
-            uiState.update { it.copy(image = null, video = size, message = null) }
+            uiState.update { it.copy(image = null, video = size, board = null, message = null) }
+        }
+    }
+
+    /** A tile can only be skipped together with everything after it, up to the next full picture. */
+    private fun showTiles(tiles: ScreenFrame.Tiles) {
+        if (tileChannel.trySend(tiles).isFailure) {
+            tileCanvas.invalidate()
+            videoLost()
         }
     }
 

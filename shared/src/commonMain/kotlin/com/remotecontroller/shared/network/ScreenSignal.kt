@@ -29,6 +29,7 @@ object ScreenSignal {
 
 object ScreenCodec {
     const val H264 = "h264"
+    const val TILES = "tiles"
 }
 
 @Serializable
@@ -40,6 +41,7 @@ private data class ScreenViewer(
 sealed interface ScreenFeed {
     data class Picture(val picture: ScreenFrame.Picture) : ScreenFeed
     data class Video(val video: ScreenFrame.Video) : ScreenFeed
+    data class Tiles(val tiles: ScreenFrame.Tiles) : ScreenFeed
     data object HostPaused : ScreenFeed
     data object HostLive : ScreenFeed
 }

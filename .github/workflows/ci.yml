@@ -135,7 +135,7 @@ jobs:
           distribution: temurin
           cache: gradle
 
-      # Also builds libmacvolume with CMake (preinstalled on GitHub's Macs) against the JDK's jni.h.
+      # Also builds libmacvolume and libscreencast with CMake (preinstalled on GitHub's Macs) against the JDK's jni.h.
       - name: Build the .dmg
         run: chmod +x gradlew && ./gradlew :desktop:packageDesktop --no-daemon --stacktrace
 
@@ -159,6 +159,10 @@ jobs:
           java-version: "21"
           distribution: temurin
           cache: gradle
+
+      # The screencast library captures through X11. GStreamer is opened at run time, so it needs no headers.
+      - name: Install the native build tools
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libx11-dev libxext-dev
 
       - name: Build the portable app (.tar.xz)
         run: chmod +x gradlew && ./scripts/build-linux.sh --stacktrace

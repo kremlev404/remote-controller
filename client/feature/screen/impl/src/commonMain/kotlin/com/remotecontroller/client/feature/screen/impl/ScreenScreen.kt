@@ -30,6 +30,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -96,7 +97,7 @@ fun ScreenScreen(
                     .fillMaxWidth()
                     .weight(1f),
             ) {
-                val image = uiState.image
+                val image = uiState.image ?: uiState.board
                 val video = uiState.video
                 val pictureWidth = image?.width ?: video?.width
                 val pictureHeight = image?.height ?: video?.height
@@ -115,12 +116,14 @@ fun ScreenScreen(
                         imageHeight = pictureHeight,
                         picture = { modifier ->
                             if (image != null) {
-                                Image(
-                                    bitmap = image,
-                                    contentDescription = "Desktop",
-                                    contentScale = ContentScale.Fit,
-                                    modifier = modifier,
-                                )
+                                key(uiState.boardVersion) {
+                                    Image(
+                                        bitmap = image,
+                                        contentDescription = "Desktop",
+                                        contentScale = ContentScale.Fit,
+                                        modifier = modifier,
+                                    )
+                                }
                             } else {
                                 VideoSurface(
                                     frames = viewModel.videoFrames,

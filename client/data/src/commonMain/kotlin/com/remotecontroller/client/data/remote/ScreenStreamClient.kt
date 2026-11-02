@@ -47,10 +47,10 @@ class ScreenStreamClient(
                             when (kind) {
                                 LinkFrame.BYTES -> {
                                     val video = ScreenFrame.unpackVideo(body)
-                                    if (video != null) {
-                                        emit(ScreenFeed.Video(video))
-                                    } else {
-                                        ScreenFrame.unpack(body)?.let { emit(ScreenFeed.Picture(it)) }
+                                    when {
+                                        video != null -> emit(ScreenFeed.Video(video))
+                                        ScreenFrame.isTiles(body) -> ScreenFrame.unpackTiles(body)?.let { emit(ScreenFeed.Tiles(it)) }
+                                        else -> ScreenFrame.unpack(body)?.let { emit(ScreenFeed.Picture(it)) }
                                     }
                                 }
                                 LinkFrame.TEXT -> {

@@ -46,14 +46,13 @@ abstract class CompileScreencastTask : DefaultTask() {
         val buildDir = cmakeBuildDir.get().asFile
         val outputDir = outputLibrary.get().asFile.parentFile
         outputDir.mkdirs()
+        // Visual Studio picks the build type at build time, the other generators here.
+        val platform = if (isWindows()) listOf("-A", "x64") else listOf("-DCMAKE_BUILD_TYPE=Release")
         execOperations.exec {
             commandLine(
-                cmake,
-                "-S", sourceDir.get().asFile.absolutePath,
-                "-B", buildDir.absolutePath,
-                "-A", "x64",
-                "-DSCREENCAST_JDK_HOME=$jdk",
-                "-DSCREENCAST_OUTPUT_DIR=${outputDir.absolutePath}",
+                listOf(cmake, "-S", sourceDir.get().asFile.absolutePath, "-B", buildDir.absolutePath) +
+                    platform +
+                    listOf("-DSCREENCAST_JDK_HOME=$jdk", "-DSCREENCAST_OUTPUT_DIR=${outputDir.absolutePath}"),
             )
         }
         execOperations.exec {
@@ -61,14 +60,17 @@ abstract class CompileScreencastTask : DefaultTask() {
         }
     }
 
+    private fun isWindows() = System.getProperty("os.name").startsWith("Win", ignoreCase = true)
+
     /** CMake on PATH, or the copy Visual Studio's C++ workload installs. */
     private fun cmakeExecutable(): String {
         System.getenv("CMAKE")?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
-        val onPath = System.getenv("PATH").orEmpty()
-            .split(File.pathSeparator)
-            .map { File(it, "cmake.exe") }
-            .firstOrNull { it.canExecute() }
+        val name = if (isWindows()) "cmake.exe" else "cmake"
+        // An IDE started from the Dock does not get the shell's PATH.
+        val folders = System.getenv("PATH").orEmpty().split(File.pathSeparator) + listOf("/opt/homebrew/bin", "/usr/local/bin")
+        val onPath = folders.map { File(it, name) }.firstOrNull { it.canExecute() }
         if (onPath != null) return onPath.absolutePath
+        if (!isWindows()) throw GradleException("Building the screencast library needs CMake on PATH.")
         val bundled = visualStudioHome()
             ?.let { File(it, "Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe") }
             ?.takeIf { it.canExecute() }
@@ -92,15 +94,12 @@ abstract class CompileScreencastTask : DefaultTask() {
     }
 }
 
-val hostIsWindows = System.getProperty("os.name").startsWith("Win", ignoreCase = true)
-
 val compileScreencast = tasks.register<CompileScreencastTask>("compileScreencast") {
     group = "build"
-    description = "Build screencast.dll, the Windows capture and encode library, with CMake"
-    onlyIf { hostIsWindows }
+    description = "Build the screencast capture and encode library for this OS with CMake"
     sourceDir.set(layout.projectDirectory.dir("src/main/cpp"))
     cmakeBuildDir.set(layout.buildDirectory.dir("cmake"))
-    outputLibrary.set(layout.buildDirectory.file("natives/screencast.dll"))
+    outputLibrary.set(layout.buildDirectory.file("natives/${System.mapLibraryName("screencast")}"))
     project.extensions.getByType<JavaToolchainService>().launcherFor {
         languageVersion.set(JavaLanguageVersion.of(21))
     }.orNull?.metadata?.installationPath?.asFile?.absolutePath?.let(jdkHome::set)
